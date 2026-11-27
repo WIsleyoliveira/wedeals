@@ -37,11 +37,13 @@ Detalhes, backup e restauração em [docs/DEPLOY.md](wedeals/docs/DEPLOY.md).
 
 ```bash
 cd wedeals
-npm test                 # tudo (98 testes)
+npm test                 # unidade, integração, segurança e E2E (98 testes)
 npm run test:unit
 npm run test:integration
 npm run test:security
 npm run test:e2e         # servidor HTTP real, fluxo completo, sem publicação real
+npm run test:browser:install   # uma vez: baixa o Chromium headless (~106 MB)
+npm run test:browser     # dashboard no Chromium: login, papéis, publicação assistida, XSS, celular
 npm run typecheck
 ```
 

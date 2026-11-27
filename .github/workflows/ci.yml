@@ -50,6 +50,31 @@ jobs:
       - name: Auditoria de dependências
         run: npm audit --audit-level=high
 
+  browser:
+    name: Testes no navegador
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: wedeals
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: wedeals/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar Chromium (headless)
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Dashboard no navegador
+        run: npm run test:browser
+
   docker:
     name: Build da imagem Docker
     runs-on: ubuntu-latest

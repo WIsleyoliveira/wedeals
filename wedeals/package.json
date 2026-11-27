@@ -13,7 +13,9 @@
     "test:security": "vitest run tests/security",
     "test:e2e": "vitest run tests/e2e",
     "demo": "node --env-file=.env.demo --no-warnings --import tsx src/server/main.ts",
-    "demo:seed": "node --env-file=.env.demo --no-warnings --import tsx src/db/seed.ts"
+    "demo:seed": "node --env-file=.env.demo --no-warnings --import tsx src/db/seed.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "test:browser:install": "playwright install --only-shell chromium"
   },
   "author": "",
   "license": "ISC",
