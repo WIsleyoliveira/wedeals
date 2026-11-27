@@ -58,6 +58,21 @@ O `.env.production` fica fora do git.
 - O sistema não deixa ficar sem nenhum administrador ativo.
 - Guardamos só nome e usuário (sem e-mail ou telefone). Senhas ficam com hash scrypt.
 
+### Verificação em duas etapas
+
+Cada pessoa pode ativar em **Ativar verificação em duas etapas** (menu lateral): escaneia o QR code
+num app autenticador (Google Authenticator, Microsoft Authenticator, 1Password…), confirma um código e
+guarda os 10 códigos de recuperação. A partir daí o login pede a senha e depois o código de 6 dígitos.
+
+- **Recomendado:** ative na sua conta e, em **Usuários → Verificação em duas etapas**, marque
+  "Obrigatória para administradores" (ou para todas as contas). Quem ainda não ativou é levado direto
+  para a ativação no próximo acesso. O sistema não deixa exigir antes de você ativar na sua conta.
+- **Perdeu o celular:** entre com um código de recuperação (cada um vale uma vez). Sem os códigos, um
+  administrador usa **Resetar 2 etapas** na conta da pessoa, que ativa de novo no próximo acesso.
+- O `ADMIN_TOKEN` de emergência não passa pela verificação em duas etapas: guarde-o com cuidado.
+- A chave de cada app fica no banco (e, portanto, nos backups). Ela sozinha não dá acesso, porque também
+  é preciso a senha, mas mantenha o bucket de backup privado.
+
 O `ADMIN_TOKEN` continua funcionando como **acesso de emergência** e para scripts (como o `curl` do
 alerta de teste). Guarde-o fora do dia a dia; as ações feitas com ele aparecem como "Token de
 administrador" na Atividade. Para trocá-lo, edite o `.env.production` e reinicie o `app`.

@@ -48,6 +48,7 @@ async function api(path, opts = {}) {
   if (res.status === 401) { logout(false); throw new Error("Sessão expirada"); }
   const data = await res.json().catch(() => ({}));
   if (res.status === 403 && data.code === "must_change_password") { showPasswordChange(true); throw new Error(data.error); }
+  if (res.status === 403 && data.code === "mfa_setup_required") { showMfa(true); throw new Error(data.error); }
   if (!res.ok) throw new Error(data.error ? `${data.error}${data.issues ? ": " + data.issues.map((i) => `${i.path} ${i.message}`).join(", ") : ""}` : `HTTP ${res.status}`);
   return data;
 }
@@ -211,12 +212,23 @@ async function renderUsers() {
       h("button", { class: "btn small", onclick: () => act2(`/api/users/${u.id}`, "PATCH", { role: u.role === "admin" ? "operador" : "admin" }, `Papel de ${u.username} alterado`) }, u.role === "admin" ? "Tornar operador" : "Tornar admin"),
       h("button", { class: "btn small" + (u.active ? " danger" : ""), onclick: () => act2(`/api/users/${u.id}`, "PATCH", { active: !u.active }, u.active ? `${u.username} desativado` : `${u.username} reativado`) }, u.active ? "Desativar" : "Reativar"),
       h("button", { class: "btn small", onclick: async () => { const pw = tempPassword(); if (await act2(`/api/users/${u.id}/password`, "POST", { password: pw }, "Senha redefinida")) showTempPassword(u.username, pw); } }, "Redefinir senha"),
+      u.mfaEnabled ? h("button", { class: "btn small", title: "Para quem perdeu o celular e os códigos de recuperação", onclick: () => confirm(`Desligar a verificação em duas etapas de ${u.username}? A pessoa entra só com a senha e precisa ativar de novo.`) && act2(`/api/users/${u.id}/mfa/reset`, "POST", {}, `Verificação em duas etapas de ${u.username} desligada`) }, "Resetar 2 etapas") : null,
     ]);
   mount("#users-list", h("div", { id: "users-notice" }),
     table([["Nome", (u) => u.displayName], ["Usuário", (u) => u.username], ["Papel", (u) => ROLE_LABEL[u.role]],
       ["Situação", (u) => h("span", { class: "pill " + (!u.active ? "off" : u.mustChangePassword ? "warn" : "ok") }, !u.active ? "desativada" : u.mustChangePassword ? "aguardando 1º acesso" : "ativa")],
+      ["2 etapas", (u) => h("span", { class: "pill " + (u.mfaEnabled ? "ok" : "off") }, u.mfaEnabled ? "ativa" : "—")],
       ["Último acesso", (u) => dt(u.lastLoginAt)], ["", actions]], users));
+  const pol = await api("/api/settings/security");
+  $("#policy-admins").checked = pol.requireMfaForAdmins;
+  $("#policy-all").checked = pol.requireMfaForAll;
 }
+async function savePolicy(e) {
+  try { await api("/api/settings/security", { method: "PUT", body: { requireMfaForAdmins: $("#policy-admins").checked, requireMfaForAll: $("#policy-all").checked } }); toast("Política de verificação em duas etapas salva"); }
+  catch (err) { toast(err.message, true); e.target.checked = !e.target.checked; }
+}
+$("#policy-admins").addEventListener("change", savePolicy);
+$("#policy-all").addEventListener("change", savePolicy);
 async function act2(path, method, body, okMsg) {
   try { await api(path, { method, body }); toast(okMsg); await renderUsers(); return true; }
   catch (e) { toast(e.message, true); return false; }
@@ -339,7 +351,9 @@ async function logout(callServer = true) {
   clearInterval(refresher);
   $("#shell").hidden = true;
   $("#pwchange").hidden = true;
+  $("#mfa-screen").hidden = true;
   $("#login").hidden = false;
+  backToLogin();
   $("#password").value = "";
   $("#token").value = "";
 }
@@ -366,9 +380,103 @@ $("#login-form").addEventListener("submit", async (e) => {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { $("#login-error").textContent = data.error || "Não foi possível entrar"; return; }
   $("#password").value = "";
+  if (data.mfaRequired) {
+    mfaToken = data.mfaToken;
+    $("#login-form").hidden = true;
+    $("#mfa-login-form").hidden = false;
+    $("#mfa-login-error").textContent = "";
+    $("#mfa-login-code").value = "";
+    $("#mfa-login-code").focus();
+    return;
+  }
   saveToken(data.token);
   await start();
 });
+
+let mfaToken = null;
+function backToLogin() {
+  mfaToken = null;
+  $("#mfa-login-form").hidden = true;
+  $("#login-form").hidden = false;
+}
+$("#mfa-login-back").addEventListener("click", backToLogin);
+$("#mfa-login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const res = await fetch("/api/auth/login/mfa", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mfaToken, code: $("#mfa-login-code").value }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (data.code === "mfa_expired") { backToLogin(); $("#login-error").textContent = data.error; return; }
+    $("#mfa-login-error").textContent = data.error || "Código inválido";
+    $("#mfa-login-code").select();
+    return;
+  }
+  backToLogin();
+  saveToken(data.token);
+  await start();
+  if (data.recoveryCodesLeft != null) toast(`Você entrou com um código de recuperação. Restam ${data.recoveryCodesLeft}. Gere novos em "Verificação em duas etapas" se estiverem acabando.`, data.recoveryCodesLeft < 3);
+});
+
+// ---------- Tela de verificação em duas etapas ----------
+let mfaForced = false;
+const field = (label, attrs) => h("label", {}, label, h("input", attrs));
+function codesBlock(codes) {
+  return h("div", { class: "stack" },
+    h("p", { class: "hint" }, "Guarde estes códigos de recuperação num lugar seguro (gerenciador de senhas ou papel). Cada um entra uma vez se você perder o celular. Eles não serão mostrados de novo."),
+    h("ol", { class: "codes" }, codes.map((c) => h("li", {}, c))),
+    h("button", { class: "btn", type: "button", onclick: async () => { await navigator.clipboard.writeText(codes.join("\n")).catch(() => {}); toast("Códigos copiados"); } }, "Copiar códigos"),
+    h("button", { class: "btn primary", type: "button", onclick: () => start() }, "Já guardei os códigos"));
+}
+async function showMfa(forced) {
+  mfaForced = forced;
+  $("#login").hidden = true;
+  $("#shell").hidden = true;
+  $("#pwchange").hidden = true;
+  $("#mfa-screen").hidden = false;
+  $("#mfa-error").textContent = "";
+  const r = await fetch("/api/auth/me", { headers: { authorization: `Bearer ${token}` } });
+  if (!r.ok) return logout(false);
+  const info = await r.json();
+  me = info.user;
+  $("#mfa-who").textContent = `${me.displayName} (${me.username})`;
+  $("#mfa-reason").textContent = forced ? "A WAPE exige verificação em duas etapas para a sua conta. Ative para continuar." : "";
+  $("#mfa-close").hidden = forced;
+  if (!me.mfaEnabled) return mount("#mfa-body", h("div", { class: "stack" },
+    h("p", { class: "hint" }, "Além da senha, o login vai pedir um código de 6 dígitos que muda a cada 30 segundos no app autenticador do seu celular (Google Authenticator, Microsoft Authenticator, 1Password…)."),
+    h("button", { class: "btn primary", type: "button", onclick: mfaSetup }, "Começar")));
+  mount("#mfa-body", h("div", { class: "stack" },
+    h("p", { class: "all-clear" }, `Ativa. Códigos de recuperação restantes: ${info.mfa.recoveryCodesLeft}.`),
+    h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      try { const r2 = await api("/api/auth/mfa/recovery-codes", { method: "POST", body: { code: e.target.code.value } }); mount("#mfa-body", codesBlock(r2.recoveryCodes)); }
+      catch (err) { $("#mfa-error").textContent = err.message; }
+    } }, field("Gerar novos códigos de recuperação: código do app", { name: "code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "7", required: true }), h("button", { class: "btn", type: "submit" }, "Gerar novos códigos")),
+    info.mfa.required ? h("p", { class: "hint" }, "Obrigatória para o seu papel: não pode ser desativada.") :
+      h("form", { class: "stack", onsubmit: async (e) => {
+        e.preventDefault();
+        try { await api("/api/auth/mfa/disable", { method: "POST", body: { password: e.target.password.value, code: e.target.code.value } }); toast("Verificação em duas etapas desativada"); await start(); }
+        catch (err) { $("#mfa-error").textContent = err.message; }
+      } }, field("Desativar: sua senha", { name: "password", type: "password", autocomplete: "current-password", required: true }),
+        field("Código do app ou de recuperação", { name: "code", autocomplete: "one-time-code", maxlength: "20", required: true }),
+        h("button", { class: "btn danger", type: "submit" }, "Desativar"))));
+}
+async function mfaSetup() {
+  try {
+    const s2 = await api("/api/auth/mfa/setup", { method: "POST", body: {} });
+    mount("#mfa-body", h("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      try { const r2 = await api("/api/auth/mfa/enable", { method: "POST", body: { code: e.target.code.value } }); toast("Verificação em duas etapas ativada"); mount("#mfa-body", codesBlock(r2.recoveryCodes)); $("#mfa-close").hidden = true; }
+      catch (err) { $("#mfa-error").textContent = err.message; }
+    } },
+      h("p", { class: "hint" }, "1. No app autenticador, adicione uma conta e escaneie o QR code:"),
+      h("img", { class: "qr", alt: "QR code para o app autenticador", src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s2.qrSvg)}` }),
+      h("p", { class: "hint" }, "Ou digite a chave manualmente:"),
+      h("p", { class: "secret" }, s2.secret.replace(/(.{4})/g, "$1 ").trim()),
+      field("2. Digite o código de 6 dígitos que aparece no app", { name: "code", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "7", required: true }),
+      h("button", { class: "btn primary", type: "submit" }, "Ativar")));
+  } catch (err) { $("#mfa-error").textContent = err.message; }
+}
+$("#open-mfa").addEventListener("click", () => showMfa(false));
+$("#mfa-close").addEventListener("click", () => { $("#mfa-screen").hidden = true; $("#shell").hidden = false; });
 
 function showPasswordChange(required) {
   $("#login").hidden = true;
@@ -406,17 +514,22 @@ $("#activity-filter").addEventListener("change", renderActivity);
 async function start() {
   const r = await fetch("/api/auth/me", { headers: { authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error("não autorizado");
-  ({ user: me } = await r.json());
+  const meInfo = await r.json();
+  me = meInfo.user;
   if (me.mustChangePassword) return showPasswordChange(true);
+  if (meInfo.mfa.required && !me.mfaEnabled) return showMfa(true);
 
   $("#login").hidden = true;
   $("#pwchange").hidden = true;
+  $("#mfa-screen").hidden = true;
   $("#shell").hidden = false;
   const isAdmin = me.role === "admin";
   document.querySelectorAll("[data-admin]").forEach((el) => (el.hidden = !isAdmin));
   $("#who-name").textContent = me.displayName;
   $("#who-role").textContent = me.id ? `${me.username} · ${ROLE_LABEL[me.role]}` : "acesso de emergência";
   $("#change-password").hidden = !me.id;
+  $("#open-mfa").hidden = !me.id;
+  $("#open-mfa").textContent = me.mfaEnabled ? "Verificação em duas etapas (ativa)" : "Ativar verificação em duas etapas";
 
   const health = await fetch("/api/health").then((r) => r.json()).catch(() => ({}));
   const flag = $("#publish-flag");

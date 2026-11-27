@@ -483,7 +483,7 @@ export class Repo {
   private toUser(r: Row): User {
     return {
       id: r.id, username: r.username, displayName: r.display_name, role: r.role, active: Boolean(r.active),
-      mustChangePassword: Boolean(r.must_change_password), createdAt: r.created_at, lastLoginAt: r.last_login_at ?? null,
+      mustChangePassword: Boolean(r.must_change_password), mfaEnabled: Boolean(r.totp_enabled), createdAt: r.created_at, lastLoginAt: r.last_login_at ?? null,
     };
   }
 
@@ -546,6 +546,52 @@ export class Repo {
 
   deleteSession(tokenHash: string) {
     this.db.prepare("DELETE FROM sessions WHERE token_hash=?").run(tokenHash);
+  }
+
+  // ---------- Verificação em duas etapas ----------
+  getMfa(id: number): { secret: string | null; pendingSecret: string | null; enabled: boolean; lastStep: number } | undefined {
+    const r = this.db.prepare("SELECT totp_secret, totp_pending_secret, totp_enabled, totp_last_step FROM users WHERE id=?").get(id) as Row | undefined;
+    return r ? { secret: r.totp_secret ?? null, pendingSecret: r.totp_pending_secret ?? null, enabled: Boolean(r.totp_enabled), lastStep: r.totp_last_step ?? -1 } : undefined;
+  }
+
+  setPendingMfa(id: number, secret: string | null) {
+    this.db.prepare("UPDATE users SET totp_pending_secret=? WHERE id=?").run(secret, id);
+  }
+
+  enableMfa(id: number, secret: string, step: number, recoveryHashes: string[]) {
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("UPDATE users SET totp_secret=?, totp_pending_secret=NULL, totp_enabled=1, totp_last_step=? WHERE id=?").run(secret, step, id);
+      this.replaceRecoveryCodes(id, recoveryHashes);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+
+  disableMfa(id: number) {
+    this.db.prepare("UPDATE users SET totp_secret=NULL, totp_pending_secret=NULL, totp_enabled=0, totp_last_step=NULL WHERE id=?").run(id);
+    this.db.prepare("DELETE FROM recovery_codes WHERE user_id=?").run(id);
+  }
+
+  setMfaLastStep(id: number, step: number) {
+    this.db.prepare("UPDATE users SET totp_last_step=? WHERE id=?").run(step, id);
+  }
+
+  replaceRecoveryCodes(id: number, hashes: string[]) {
+    this.db.prepare("DELETE FROM recovery_codes WHERE user_id=?").run(id);
+    const ins = this.db.prepare("INSERT INTO recovery_codes (user_id, code_hash) VALUES (?,?)");
+    for (const h of hashes) ins.run(id, h);
+  }
+
+  /** Marca o código como usado; false se não existe ou já foi usado. */
+  useRecoveryCode(id: number, hash: string, at: Date): boolean {
+    return this.db.prepare("UPDATE recovery_codes SET used_at=? WHERE user_id=? AND code_hash=? AND used_at IS NULL").run(at.toISOString(), id, hash).changes === 1;
+  }
+
+  recoveryCodesLeft(id: number): number {
+    return (this.db.prepare("SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id=? AND used_at IS NULL").get(id) as Row).n;
   }
 
   /** Encerra as sessões do usuário (todas, ou todas menos a atual). */

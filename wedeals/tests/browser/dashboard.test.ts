@@ -1,5 +1,6 @@
 import { expect as pw } from "playwright/test";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { base32Decode, hotp, totpStep } from "../../src/security/totp";
 import { startDashboard } from "./fixture";
 
 let d: Awaited<ReturnType<typeof startDashboard>>;
@@ -180,6 +181,65 @@ describe("dashboard no navegador", () => {
     await pw(page.locator("#alerts-history tbody tr").first()).toContainText("Resolvido");
     expect(errors).toEqual([]);
     await context.close();
+  });
+
+  it("verificação em duas etapas: ativar pelo QR, guardar códigos e entrar com o código do app", async () => {
+    await d.addUser("segura", "operador", "senha-da-segura-1");
+    const { page, context, errors } = await d.open();
+    await d.login(page, "segura", "senha-da-segura-1");
+    await page.getByRole("button", { name: "Ativar verificação em duas etapas" }).click();
+    await page.getByRole("button", { name: "Começar" }).click();
+    await pw(page.locator("img.qr")).toBeVisible();
+    const secret = (await page.locator(".secret").textContent())!.replace(/\s/g, "");
+    const code = (offset = 0) => hotp(base32Decode(secret), totpStep(d.ctx.clock()) + offset);
+
+    await page.locator('#mfa-body [name="code"]').fill("000000");
+    await page.getByRole("button", { name: "Ativar" }).click();
+    await pw(page.locator("#mfa-error")).toContainText("código incorreto");
+    await page.locator('#mfa-body [name="code"]').fill(code());
+    await page.getByRole("button", { name: "Ativar" }).click();
+    await pw(page.locator(".codes li")).toHaveCount(10);
+    const recovery = await page.locator(".codes li").first().textContent();
+    await page.getByRole("button", { name: "Já guardei os códigos" }).click();
+    await pw(page.locator("#open-mfa")).toHaveText("Verificação em duas etapas (ativa)");
+
+    // novo login: senha e depois o código (o próximo, já que o atual foi usado para ativar)
+    await page.getByRole("button", { name: "Sair" }).click();
+    await d.login(page, "segura", "senha-da-segura-1");
+    await pw(page.locator("#mfa-login-form")).toBeVisible();
+    await page.locator("#mfa-login-code").fill("123456");
+    await page.getByRole("button", { name: "Confirmar" }).click();
+    await pw(page.locator("#mfa-login-error")).toHaveText("código inválido");
+    d.advance(30_000);
+    await page.locator("#mfa-login-code").fill(code());
+    await page.getByRole("button", { name: "Confirmar" }).click();
+    await pw(page.locator("#shell")).toBeVisible();
+
+    // código de recuperação também entra, e avisa quantos restam
+    await page.getByRole("button", { name: "Sair" }).click();
+    await d.login(page, "segura", "senha-da-segura-1");
+    await page.locator("#mfa-login-code").fill(recovery!);
+    await page.getByRole("button", { name: "Confirmar" }).click();
+    await pw(page.locator("#toast")).toContainText("Restam 9");
+    expect(errors).toEqual([]);
+    await context.close();
+  });
+
+  it("política obrigatória leva quem não tem 2FA direto para a ativação, sem pular", async () => {
+    await d.addUser("obrigada", "operador", "senha-da-obrigada-1");
+    d.ctx.repo.setSetting("security.policy", { requireMfaForAdmins: false, requireMfaForAll: true });
+    try {
+      const { page, context, errors } = await d.open();
+      await d.login(page, "obrigada", "senha-da-obrigada-1");
+      await pw(page.locator("#mfa-screen")).toBeVisible();
+      await pw(page.locator("#mfa-reason")).toContainText("exige verificação em duas etapas");
+      await pw(page.locator("#mfa-close")).toBeHidden();
+      await pw(page.locator("#shell")).toBeHidden();
+      expect(errors).toEqual([]);
+      await context.close();
+    } finally {
+      d.ctx.repo.setSetting("security.policy", { requireMfaForAdmins: false, requireMfaForAll: false });
+    }
   });
 
   it("sair encerra a sessão no servidor", async () => {

@@ -131,7 +131,7 @@ describe("segurança", () => {
     expect(dump).not.toContain("senha-provisoria-1");
     expect(dump).not.toContain(token);
     const cols = (ctx.repo.db.prepare("PRAGMA table_info(users)").all() as any[]).map((c) => c.name);
-    expect(cols.sort()).toEqual(["active", "created_at", "display_name", "id", "last_login_at", "must_change_password", "password_hash", "role", "username"]);
+    expect(cols.sort()).toEqual(["active", "created_at", "display_name", "id", "last_login_at", "must_change_password", "password_hash", "role", "totp_enabled", "totp_last_step", "totp_pending_secret", "totp_secret", "username"]);
     // nenhuma resposta da API devolve o hash
     const list = (await app.inject({ url: "/api/users", headers: auth })).body;
     expect(list).not.toMatch(/scrypt|password_hash|passwordHash/);
