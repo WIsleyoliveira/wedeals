@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WeDeals · WAPE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <section id="login" class="login">
+    <form id="login-form" class="login-card">
+      <div class="brand"><span class="brand-mark">W</span><div><strong>WeDeals</strong><small>Central de grupos de promoções · WAPE</small></div></div>
+      <label for="token">Token de administrador</label>
+      <input id="token" type="password" autocomplete="current-password" required minlength="24" />
+      <button type="submit" class="btn primary">Entrar</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="shell" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">W</span><div><strong>WeDeals</strong><small>by WAPE</small></div></div>
+      <nav id="nav">
+        <button data-view="overview" class="active">Visão geral</button>
+        <button data-view="assisted">Publicação assistida <span id="badge-assisted" class="badge" hidden></span></button>
+        <button data-view="groups">Grupos</button>
+        <button data-view="offers">Ofertas</button>
+        <button data-view="links">Aguardando link <span id="badge-links" class="badge" hidden></span></button>
+        <button data-view="insights">Inteligência</button>
+        <button data-view="finance">Comissões e custos</button>
+        <button data-view="integrations">Integrações e agentes</button>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="publish-flag" class="pill"></span>
+        <button id="logout" class="link">Sair</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <h1 id="view-title">Visão geral</h1>
+        <div class="topbar-actions">
+          <span id="demo-flag" class="pill warn" hidden>Contém dados de demonstração</span>
+          <button id="run-brain" class="btn">Rodar ciclo do Mega Brain</button>
+        </div>
+      </header>
+      <p id="toast" class="toast" role="status" hidden></p>
+
+      <section data-panel="overview">
+        <div id="kpis" class="kpis"></div>
+        <div class="grid2">
+          <div class="card"><h2>Desempenho por marketplace</h2><div id="mk-table"></div></div>
+          <div class="card"><h2>Próximas publicações</h2><div id="upcoming"></div></div>
+        </div>
+        <div class="grid2">
+          <div class="card"><h2>Desempenho por grupo <small>(atribuição por link rastreável)</small></h2><div id="group-perf"></div></div>
+          <div class="card"><h2>Fila de processamento</h2><div id="queue"></div></div>
+        </div>
+      </section>
+
+      <section data-panel="assisted" hidden>
+        <p class="hint">O WhatsApp não oferece API oficial para grupos grandes. O Mega Brain prepara cada mensagem; você copia, envia no grupo e confirma aqui.</p>
+        <div id="assisted-list" class="assisted"></div>
+      </section>
+
+      <section data-panel="groups" hidden>
+        <div class="card">
+          <h2>Novo grupo</h2>
+          <form id="group-form" class="form-grid">
+            <label>Nome<input name="name" required maxlength="100" /></label>
+            <label>Plataforma<select name="platform"><option value="whatsapp">WhatsApp</option><option value="telegram">Telegram</option></select></label>
+            <label>Link de convite<input name="inviteLink" type="url" placeholder="https://chat.whatsapp.com/..." /></label>
+            <label>ID externo (Telegram chat_id)<input name="externalId" /></label>
+            <label>Administradores (vírgula)<input name="admins" /></label>
+            <label>Categorias permitidas (vírgula, vazio = todas)<input name="categories" /></label>
+            <label>Marketplaces<select name="marketplaces" multiple><option value="mercadolivre">Mercado Livre</option><option value="shopee">Shopee</option><option value="shein">SHEIN</option></select></label>
+            <label>Participantes (informado)<input name="audience" type="number" min="0" /></label>
+            <label>Início<input name="windowStart" type="time" value="08:00" /></label>
+            <label>Fim<input name="windowEnd" type="time" value="22:00" /></label>
+            <label>Intervalo mínimo (min)<input name="minIntervalMinutes" type="number" value="30" min="5" /></label>
+            <label>Máx. publicações/dia<input name="maxDailyPosts" type="number" value="20" min="1" /></label>
+            <label>Deal Score mínimo<input name="minDealScore" type="number" value="60" min="0" max="100" /></label>
+            <label>Carência p/ repetir oferta (dias)<input name="repostCooldownDays" type="number" value="7" min="1" /></label>
+            <label>Conta de afiliado<input name="affiliateAccount" /></label>
+            <label>Modo<select name="mode"><option value="assisted">Assistido</option><option value="automatic">Automático (somente integração oficial)</option></select></label>
+            <label class="span2">Template (opcional: {chamada} {titulo} {linha_preco} {linha_cupom} {marketplace} {link})<textarea name="template" rows="3"></textarea></label>
+            <button class="btn primary span2" type="submit">Cadastrar grupo</button>
+          </form>
+        </div>
+        <div id="groups-list"></div>
+      </section>
+
+      <section data-panel="offers" hidden>
+        <div class="card">
+          <h2>Importar ofertas com links oficiais (CSV)</h2>
+          <p class="hint">Colunas: marketplace, external_id, title, url, affiliate_url, image_url, price, original_price, category, seller_reputation, official_store, commission_rate, coupon_code, coupon_discount</p>
+          <form id="import-form"><input type="file" id="import-file" accept=".csv,text/csv" /><button class="btn" type="submit">Importar</button></form>
+        </div>
+        <div class="filters"><select id="offer-filter"><option value="">Todas</option><option value="approved">Aprovadas</option><option value="queued">Na fila</option><option value="published">Publicadas</option><option value="rejected">Rejeitadas</option><option value="discovered">Novas</option><option value="expired">Expiradas</option></select></div>
+        <div id="offers-list"></div>
+      </section>
+
+      <section data-panel="links" hidden>
+        <p class="hint">Ofertas aprovadas pelo Mega Brain que ainda precisam do link oficial de afiliado (Mercado Livre: Gerador de link do painel; SHEIN: portal de afiliados ou rede parceira).</p>
+        <div id="links-list"></div>
+      </section>
+
+      <section data-panel="insights" hidden><div id="insights"></div></section>
+
+      <section data-panel="finance" hidden>
+        <div class="grid2">
+          <div class="card">
+            <h2>Importar relatório de comissões (CSV)</h2>
+            <p class="hint">Colunas: marketplace, order_ref, tracking_code, offer_external_id, category, sale_amount, commission_amount, status (pending/approved/paid/cancelled), occurred_at</p>
+            <form id="commission-form"><input type="file" id="commission-file" accept=".csv,text/csv" /><button class="btn" type="submit">Importar</button></form>
+          </div>
+          <div class="card">
+            <h2>Registrar custo operacional</h2>
+            <form id="cost-form" class="form-grid">
+              <label>Categoria<select name="category"><option>infraestrutura</option><option>ia</option><option>api</option><option>ferramentas</option><option>pessoas</option><option>outros</option></select></label>
+              <label>Valor (R$)<input name="amount" type="number" step="0.01" min="0" required /></label>
+              <label class="span2">Descrição<input name="description" required /></label>
+              <button class="btn span2" type="submit">Registrar</button>
+            </form>
+          </div>
+        </div>
+        <div id="finance-summary" class="kpis"></div>
+      </section>
+
+      <section data-panel="integrations" hidden>
+        <div class="grid2">
+          <div class="card"><h2>Integrações</h2><div id="integrations"></div></div>
+          <div class="card"><h2>Agentes de IA</h2><div id="agents"></div></div>
+        </div>
+        <div class="card"><h2>Cotas</h2><div id="quotas"></div></div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

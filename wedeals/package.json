@@ -1,0 +1,33 @@
+{
+  "name": "wedeals",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "tsx src/server/main.ts",
+    "worker": "tsx src/scheduler/worker.ts",
+    "seed": "tsx src/db/seed.ts",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:security": "vitest run tests/security",
+    "test:e2e": "vitest run tests/e2e",
+    "demo": "node --env-file=.env.demo --no-warnings --import tsx src/server/main.ts",
+    "demo:seed": "node --env-file=.env.demo --no-warnings --import tsx src/db/seed.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fastify": "^5.12.8",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.7",
+    "playwright": "^1.65.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "type": "module",
+  "private": true
+}
