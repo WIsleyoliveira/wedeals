@@ -17,7 +17,7 @@ Requer Node 22+ (usa `node:sqlite`, sem dependências nativas).
 ```bash
 cd wedeals
 npm install
-cp .env.example .env        # defina ADMIN_TOKEN (mín. 24 caracteres)
+cp .env.example .env        # defina ADMIN_TOKEN (mín. 24 caracteres): acesso de emergência e criação da 1ª conta
 node --env-file=.env --import tsx src/db/seed.ts      # opcional: dados DEMO marcados
 node --env-file=.env --import tsx src/server/main.ts  # API + dashboard em http://127.0.0.1:3100
 node --env-file=.env --import tsx src/scheduler/worker.ts  # Mega Brain contínuo (24h)
@@ -37,7 +37,7 @@ Detalhes, backup e restauração em [docs/DEPLOY.md](wedeals/docs/DEPLOY.md).
 
 ```bash
 cd wedeals
-npm test                 # tudo (85 testes)
+npm test                 # tudo (98 testes)
 npm run test:unit
 npm run test:integration
 npm run test:security

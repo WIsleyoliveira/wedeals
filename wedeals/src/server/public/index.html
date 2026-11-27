@@ -12,10 +12,35 @@
   <section id="login" class="login">
     <form id="login-form" class="login-card">
       <div class="brand"><span class="brand-mark">W</span><div><strong>WeDeals</strong><small>Central de grupos de promoções · WAPE</small></div></div>
-      <label for="token">Token de administrador</label>
-      <input id="token" type="password" autocomplete="current-password" required minlength="24" />
+      <div id="login-user" class="login-fields">
+        <label for="username">Usuário</label>
+        <input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" />
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" maxlength="200" />
+      </div>
+      <div id="login-token" class="login-fields" hidden>
+        <label for="token">Token de administrador</label>
+        <input id="token" type="password" autocomplete="off" minlength="24" />
+      </div>
       <button type="submit" class="btn primary">Entrar</button>
+      <button type="button" id="login-mode" class="link">Entrar com o token de administrador</button>
       <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="pwchange" class="login" hidden>
+    <form id="pw-form" class="login-card">
+      <div class="brand"><span class="brand-mark">W</span><div><strong>Trocar senha</strong><small id="pw-who"></small></div></div>
+      <p id="pw-reason" class="hint"></p>
+      <label for="pw-current">Senha atual</label>
+      <input id="pw-current" type="password" autocomplete="current-password" required maxlength="200" />
+      <label for="pw-new">Nova senha (mínimo 10 caracteres)</label>
+      <input id="pw-new" type="password" autocomplete="new-password" required minlength="10" maxlength="200" />
+      <label for="pw-confirm">Repita a nova senha</label>
+      <input id="pw-confirm" type="password" autocomplete="new-password" required minlength="10" maxlength="200" />
+      <button type="submit" class="btn primary">Salvar nova senha</button>
+      <button type="button" id="pw-cancel" class="link">Voltar</button>
+      <p id="pw-error" class="error" role="alert"></p>
     </form>
   </section>
 
@@ -31,9 +56,13 @@
         <button data-view="insights">Inteligência</button>
         <button data-view="finance">Comissões e custos</button>
         <button data-view="integrations">Integrações e agentes</button>
+        <button data-view="users" data-admin hidden>Usuários</button>
+        <button data-view="activity" data-admin hidden>Atividade</button>
       </nav>
       <div class="sidebar-foot">
         <span id="publish-flag" class="pill"></span>
+        <div class="whoami"><strong id="who-name"></strong><small id="who-role"></small></div>
+        <button id="change-password" class="link">Trocar senha</button>
         <button id="logout" class="link">Sair</button>
       </div>
     </aside>
@@ -66,7 +95,7 @@
       </section>
 
       <section data-panel="groups" hidden>
-        <div class="card">
+        <div class="card" data-admin hidden>
           <h2>Novo grupo</h2>
           <form id="group-form" class="form-grid">
             <label>Nome<input name="name" required maxlength="100" /></label>
@@ -110,7 +139,7 @@
       <section data-panel="insights" hidden><div id="insights"></div></section>
 
       <section data-panel="finance" hidden>
-        <div class="grid2">
+        <div class="grid2" data-admin hidden>
           <div class="card">
             <h2>Importar relatório de comissões (CSV)</h2>
             <p class="hint">Colunas: marketplace, order_ref, tracking_code, offer_external_id, category, sale_amount, commission_amount, status (pending/approved/paid/cancelled), occurred_at</p>
@@ -135,6 +164,27 @@
           <div class="card"><h2>Agentes de IA</h2><div id="agents"></div></div>
         </div>
         <div class="card"><h2>Cotas</h2><div id="quotas"></div></div>
+      </section>
+
+      <section data-panel="users" hidden>
+        <div class="card">
+          <h2>Nova conta</h2>
+          <p class="hint">A senha inicial é provisória: a pessoa troca no primeiro acesso. Guardamos só nome e usuário, sem e-mail ou telefone.</p>
+          <form id="user-form" class="form-grid">
+            <label>Nome<input name="displayName" required minlength="2" maxlength="60" /></label>
+            <label>Usuário<input name="username" required pattern="[a-z0-9._\-]{3,32}" maxlength="32" autocapitalize="none" spellcheck="false" placeholder="ex.: maria.silva" /></label>
+            <label>Papel<select name="role"><option value="operador">Operador</option><option value="admin">Administrador</option></select></label>
+            <label>Senha provisória<span class="inline"><input name="password" required minlength="10" maxlength="200" autocomplete="off" /><button type="button" id="gen-password" class="btn small">Gerar</button></span></label>
+            <button class="btn primary span2" type="submit">Criar conta</button>
+          </form>
+          <p class="hint"><strong>Operador</strong>: publicação assistida, ofertas, links, pausar grupos e rodar o ciclo. <strong>Administrador</strong>: tudo isso, mais grupos, comissões, custos, configurações e contas.</p>
+        </div>
+        <div class="card"><h2>Contas</h2><div id="users-list"></div></div>
+      </section>
+
+      <section data-panel="activity" hidden>
+        <div class="filters"><select id="activity-filter"><option value="">Todas as pessoas</option></select></div>
+        <div class="card"><div id="activity-list"></div></div>
       </section>
     </main>
   </div>

@@ -8,6 +8,8 @@ import type {
   Publication,
   PublicationStatus,
   RawOffer,
+  Role,
+  User,
 } from "../domain/types";
 
 type Row = Record<string, any>;
@@ -461,10 +463,93 @@ export class Repo {
     return this.db.prepare("SELECT * FROM agent_runs ORDER BY agent").all() as Row[];
   }
 
-  audit(action: string, detail: unknown, at: Date) {
+  audit(action: string, detail: unknown, at: Date, actor: string | null = null) {
     this.db
-      .prepare("INSERT INTO audit_log (action, detail, at) VALUES (?,?,?)")
-      .run(action, JSON.stringify(detail ?? null).slice(0, 2000), at.toISOString());
+      .prepare("INSERT INTO audit_log (action, detail, at, actor) VALUES (?,?,?,?)")
+      .run(action, JSON.stringify(detail ?? null).slice(0, 2000), at.toISOString(), actor);
+  }
+
+  listAudit(o: { limit?: number; actor?: string } = {}): { id: number; action: string; detail: unknown; at: string; actor: string | null }[] {
+    const rows = (
+      o.actor
+        ? this.db.prepare("SELECT * FROM audit_log WHERE actor = ? ORDER BY id DESC LIMIT ?").all(o.actor, o.limit ?? 200)
+        : this.db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(o.limit ?? 200)
+    ) as Row[];
+    return rows.map((r) => ({ id: r.id, action: r.action, detail: parse(r.detail, null), at: r.at, actor: r.actor ?? null }));
+  }
+
+  // ---------- Usuários e sessões ----------
+  private toUser(r: Row): User {
+    return {
+      id: r.id, username: r.username, displayName: r.display_name, role: r.role, active: Boolean(r.active),
+      mustChangePassword: Boolean(r.must_change_password), createdAt: r.created_at, lastLoginAt: r.last_login_at ?? null,
+    };
+  }
+
+  createUser(u: { username: string; displayName: string; role: Role; passwordHash: string; mustChangePassword: boolean }, at: Date): User {
+    const r = this.db
+      .prepare("INSERT INTO users (username, display_name, role, password_hash, must_change_password, created_at) VALUES (?,?,?,?,?,?) RETURNING *")
+      .get(u.username, u.displayName, u.role, u.passwordHash, u.mustChangePassword ? 1 : 0, at.toISOString()) as Row;
+    return this.toUser(r);
+  }
+
+  listUsers(): User[] {
+    return (this.db.prepare("SELECT * FROM users ORDER BY active DESC, username").all() as Row[]).map((r) => this.toUser(r));
+  }
+
+  getUser(id: number): User | undefined {
+    const r = this.db.prepare("SELECT * FROM users WHERE id=?").get(id) as Row | undefined;
+    return r ? this.toUser(r) : undefined;
+  }
+
+  /** Inclui o hash da senha: só para o login. */
+  findUserForLogin(username: string): (User & { passwordHash: string }) | undefined {
+    const r = this.db.prepare("SELECT * FROM users WHERE username=?").get(username) as Row | undefined;
+    return r ? { ...this.toUser(r), passwordHash: r.password_hash } : undefined;
+  }
+
+  getPasswordHash(id: number): string | undefined {
+    return (this.db.prepare("SELECT password_hash FROM users WHERE id=?").get(id) as Row | undefined)?.password_hash;
+  }
+
+  updateUser(id: number, f: { displayName?: string; role?: Role; active?: boolean }) {
+    const cur = this.getUser(id);
+    if (!cur) return undefined;
+    this.db
+      .prepare("UPDATE users SET display_name=?, role=?, active=? WHERE id=?")
+      .run(f.displayName ?? cur.displayName, f.role ?? cur.role, (f.active ?? cur.active) ? 1 : 0, id);
+    return this.getUser(id);
+  }
+
+  setPassword(id: number, passwordHash: string, mustChange: boolean) {
+    this.db.prepare("UPDATE users SET password_hash=?, must_change_password=? WHERE id=?").run(passwordHash, mustChange ? 1 : 0, id);
+  }
+
+  countActiveAdmins(): number {
+    return (this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1").get() as Row).n;
+  }
+
+  createSession(tokenHash: string, userId: number, at: Date, expiresAt: Date) {
+    this.db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(at.toISOString());
+    this.db.prepare("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)").run(tokenHash, userId, at.toISOString(), expiresAt.toISOString());
+    this.db.prepare("UPDATE users SET last_login_at=? WHERE id=?").run(at.toISOString(), userId);
+  }
+
+  /** Sessão válida de usuário ativo, ou undefined. */
+  findSession(tokenHash: string, at: Date): (User & { expiresAt: string }) | undefined {
+    const r = this.db
+      .prepare("SELECT u.*, s.expires_at AS s_expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash=? AND s.expires_at > ? AND u.active=1")
+      .get(tokenHash, at.toISOString()) as Row | undefined;
+    return r ? { ...this.toUser(r), expiresAt: r.s_expires } : undefined;
+  }
+
+  deleteSession(tokenHash: string) {
+    this.db.prepare("DELETE FROM sessions WHERE token_hash=?").run(tokenHash);
+  }
+
+  /** Encerra as sessões do usuário (todas, ou todas menos a atual). */
+  deleteUserSessions(userId: number, exceptTokenHash?: string) {
+    this.db.prepare("DELETE FROM sessions WHERE user_id=? AND token_hash != ?").run(userId, exceptTokenHash ?? "");
   }
 
   incrCounter(metric: string, at: Date, by = 1) {

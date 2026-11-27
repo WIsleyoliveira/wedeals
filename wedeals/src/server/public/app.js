@@ -45,8 +45,9 @@ async function api(path, opts = {}) {
     headers: { authorization: `Bearer ${token}`, ...(opts.body ? { "content-type": "application/json" } : {}) },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) { logout(); throw new Error("Sessão expirada"); }
+  if (res.status === 401) { logout(false); throw new Error("Sessão expirada"); }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 403 && data.code === "must_change_password") { showPasswordChange(true); throw new Error(data.error); }
   if (!res.ok) throw new Error(data.error ? `${data.error}${data.issues ? ": " + data.issues.map((i) => `${i.path} ${i.message}`).join(", ") : ""}` : `HTTP ${res.status}`);
   return data;
 }
@@ -182,7 +183,58 @@ async function renderIntegrations() {
   mount("#quotas", table([["Provedor", (r) => r.provider], ["Hora", (r) => `${r.hour.used}/${r.hour.limit}`], ["Dia", (r) => `${r.day.used}/${r.day.limit}`]], i.quotas));
 }
 
-const VIEWS = { overview: ["Visão geral", renderOverview], assisted: ["Publicação assistida", renderAssisted], groups: ["Grupos", renderGroups], offers: ["Ofertas", renderOffers], links: ["Aguardando link", renderLinks], insights: ["Inteligência comercial", renderInsights], finance: ["Comissões e custos", renderFinance], integrations: ["Integrações e agentes", renderIntegrations] };
+const ROLE_LABEL = { admin: "Administrador", operador: "Operador" };
+const ACTION_LABEL = { "auth.login": "Entrou", "auth.logout": "Saiu", "auth.login_failed": "Senha errada", "auth.denied": "Acesso negado" };
+const ROUTE_LABEL = {
+  "POST /api/publications/:id/confirm": "Confirmou publicação", "POST /api/publications/:id/skip": "Descartou publicação",
+  "POST /api/offers/import": "Importou ofertas", "POST /api/offers/:id/link": "Vinculou link de afiliado", "POST /api/offers/:id/reject": "Rejeitou oferta",
+  "POST /api/offers/:id/distribute": "Distribuiu oferta", "POST /api/groups": "Criou grupo", "PATCH /api/groups/:id": "Editou grupo",
+  "POST /api/groups/:id/pause": "Pausou grupo", "POST /api/groups/:id/resume": "Retomou grupo", "POST /api/commissions/import": "Importou comissões",
+  "POST /api/costs": "Registrou custo", "POST /api/brain/run": "Rodou o ciclo do Mega Brain", "PUT /api/settings/brain": "Alterou configurações do Mega Brain",
+  "PUT /api/settings/learning-bounds": "Alterou limites de aprendizado", "POST /api/alerts/test": "Enviou alerta de teste", "POST /api/users": "Criou conta",
+  "PATCH /api/users/:id": "Editou conta", "POST /api/users/:id/password": "Redefiniu senha", "POST /api/auth/password": "Trocou a própria senha",
+};
+
+function tempPassword() {
+  const abc = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(14));
+  return Array.from(bytes, (b) => abc[b % abc.length]).join("").replace(/(.{4})(?=.)/g, "$1-");
+}
+function showTempPassword(user, pw) {
+  mount("#users-notice", h("div", { class: "toast" }, `Senha provisória de ${user}: `, h("span", { class: "temp-password" }, pw), " — passe para a pessoa por um canal seguro. Ela troca no primeiro acesso."));
+}
+
+async function renderUsers() {
+  const users = await api("/api/users");
+  const actions = (u) => h("div", { class: "actions" },
+    me.id === u.id ? h("span", { class: "pill off" }, "você") : [
+      h("button", { class: "btn small", onclick: () => act2(`/api/users/${u.id}`, "PATCH", { role: u.role === "admin" ? "operador" : "admin" }, `Papel de ${u.username} alterado`) }, u.role === "admin" ? "Tornar operador" : "Tornar admin"),
+      h("button", { class: "btn small" + (u.active ? " danger" : ""), onclick: () => act2(`/api/users/${u.id}`, "PATCH", { active: !u.active }, u.active ? `${u.username} desativado` : `${u.username} reativado`) }, u.active ? "Desativar" : "Reativar"),
+      h("button", { class: "btn small", onclick: async () => { const pw = tempPassword(); if (await act2(`/api/users/${u.id}/password`, "POST", { password: pw }, "Senha redefinida")) showTempPassword(u.username, pw); } }, "Redefinir senha"),
+    ]);
+  mount("#users-list", h("div", { id: "users-notice" }),
+    table([["Nome", (u) => u.displayName], ["Usuário", (u) => u.username], ["Papel", (u) => ROLE_LABEL[u.role]],
+      ["Situação", (u) => h("span", { class: "pill " + (!u.active ? "off" : u.mustChangePassword ? "warn" : "ok") }, !u.active ? "desativada" : u.mustChangePassword ? "aguardando 1º acesso" : "ativa")],
+      ["Último acesso", (u) => dt(u.lastLoginAt)], ["", actions]], users));
+}
+async function act2(path, method, body, okMsg) {
+  try { await api(path, { method, body }); toast(okMsg); await renderUsers(); return true; }
+  catch (e) { toast(e.message, true); return false; }
+}
+
+async function renderActivity() {
+  const sel = $("#activity-filter");
+  if (sel.options.length <= 1) {
+    const users = await api("/api/users").catch(() => []);
+    for (const u of [...users.map((x) => x.username), "token-admin"]) sel.append(h("option", { value: u }, u === "token-admin" ? "Token de administrador" : u));
+  }
+  const q = sel.value ? `?actor=${encodeURIComponent(sel.value)}` : "";
+  const rows = await api(`/api/activity${q}`);
+  const what = (e) => e.action === "api" ? (ROUTE_LABEL[e.detail?.route] || e.detail?.route) + (e.detail?.id ? ` #${e.detail.id}` : "") + (e.detail?.status >= 400 ? ` (recusado: ${e.detail.status})` : "") : ACTION_LABEL[e.action] || e.action;
+  mount("#activity-list", table([["Quando", (e) => dt(e.at)], ["Quem", (e) => e.actor === "token-admin" ? "Token de administrador" : e.actor || "sistema"], ["O quê", what, "wrap"]], rows));
+}
+
+const VIEWS = { users: ["Usuários", renderUsers], activity: ["Atividade", renderActivity], overview: ["Visão geral", renderOverview], assisted: ["Publicação assistida", renderAssisted], groups: ["Grupos", renderGroups], offers: ["Ofertas", renderOffers], links: ["Aguardando link", renderLinks], insights: ["Inteligência comercial", renderInsights], finance: ["Comissões e custos", renderFinance], integrations: ["Integrações e agentes", renderIntegrations] };
 let current = "overview";
 async function show(view) {
   current = view;
@@ -234,27 +286,103 @@ $("#run-brain").addEventListener("click", async () => {
 document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
 
 // ---------- Sessão ----------
-function logout() {
-  token = null;
-  try { sessionStorage.removeItem("wedeals.token"); } catch {}
+let me = null; // { id, username, displayName, role, mustChangePassword } ou o token de administrador
+let refresher = null;
+
+function saveToken(t) { token = t; try { t ? sessionStorage.setItem("wedeals.token", t) : sessionStorage.removeItem("wedeals.token"); } catch {} }
+
+async function logout(callServer = true) {
+  if (callServer && token) await fetch("/api/auth/logout", { method: "POST", headers: { authorization: `Bearer ${token}` } }).catch(() => {});
+  saveToken(null);
+  me = null;
+  clearInterval(refresher);
   $("#shell").hidden = true;
+  $("#pwchange").hidden = true;
   $("#login").hidden = false;
+  $("#password").value = "";
+  $("#token").value = "";
 }
-$("#logout").addEventListener("click", logout);
+$("#logout").addEventListener("click", () => logout());
+
+let tokenMode = false;
+$("#login-mode").addEventListener("click", () => {
+  tokenMode = !tokenMode;
+  $("#login-user").hidden = tokenMode;
+  $("#login-token").hidden = !tokenMode;
+  $("#login-mode").textContent = tokenMode ? "Entrar com usuário e senha" : "Entrar com o token de administrador";
+  $("#login-error").textContent = "";
+});
+
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  token = $("#token").value.trim();
-  try { await api("/api/dashboard"); try { sessionStorage.setItem("wedeals.token", token); } catch {} start(); }
-  catch (err) { $("#login-error").textContent = "Token inválido"; token = null; }
+  $("#login-error").textContent = "";
+  if (tokenMode) {
+    saveToken($("#token").value.trim());
+    try { await start(); } catch { $("#login-error").textContent = "Token inválido"; saveToken(null); }
+    return;
+  }
+  const res = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: $("#username").value, password: $("#password").value }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { $("#login-error").textContent = data.error || "Não foi possível entrar"; return; }
+  $("#password").value = "";
+  saveToken(data.token);
+  await start();
 });
-async function start() {
+
+function showPasswordChange(required) {
   $("#login").hidden = true;
+  $("#shell").hidden = true;
+  $("#pwchange").hidden = false;
+  $("#pw-who").textContent = me ? `${me.displayName} (${me.username})` : "";
+  $("#pw-reason").textContent = required ? "Esta é uma senha provisória. Crie a sua para continuar." : "";
+  $("#pw-cancel").hidden = required;
+  $("#pw-error").textContent = "";
+  $("#pw-current").focus();
+}
+$("#change-password").addEventListener("click", () => showPasswordChange(false));
+$("#pw-cancel").addEventListener("click", () => { $("#pwchange").hidden = true; $("#shell").hidden = false; });
+$("#pw-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if ($("#pw-new").value !== $("#pw-confirm").value) { $("#pw-error").textContent = "As senhas não conferem"; return; }
+  try {
+    await api("/api/auth/password", { method: "POST", body: { currentPassword: $("#pw-current").value, newPassword: $("#pw-new").value } });
+    e.target.reset();
+    toast("Senha alterada. As outras sessões foram encerradas.");
+    await start();
+  } catch (err) { $("#pw-error").textContent = err.message; }
+});
+
+$("#user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const body = { displayName: f.get("displayName"), username: String(f.get("username")).trim().toLowerCase(), role: f.get("role"), password: f.get("password") };
+  try { await api("/api/users", { method: "POST", body }); toast(`Conta ${body.username} criada`); e.target.reset(); await renderUsers(); showTempPassword(body.username, body.password); }
+  catch (err) { toast(err.message, true); }
+});
+$("#gen-password").addEventListener("click", () => { $("#user-form").elements.password.value = tempPassword(); });
+$("#activity-filter").addEventListener("change", renderActivity);
+
+async function start() {
+  const r = await fetch("/api/auth/me", { headers: { authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error("não autorizado");
+  ({ user: me } = await r.json());
+  if (me.mustChangePassword) return showPasswordChange(true);
+
+  $("#login").hidden = true;
+  $("#pwchange").hidden = true;
   $("#shell").hidden = false;
+  const isAdmin = me.role === "admin";
+  document.querySelectorAll("[data-admin]").forEach((el) => (el.hidden = !isAdmin));
+  $("#who-name").textContent = me.displayName;
+  $("#who-role").textContent = me.id ? `${me.username} · ${ROLE_LABEL[me.role]}` : "acesso de emergência";
+  $("#change-password").hidden = !me.id;
+
   const health = await fetch("/api/health").then((r) => r.json()).catch(() => ({}));
   const flag = $("#publish-flag");
   flag.textContent = health.publishEnabled ? "Publicação real LIBERADA" : "Publicação real desligada";
   flag.className = "pill " + (health.publishEnabled ? "warn" : "ok");
-  show("overview");
-  setInterval(() => current === "overview" && renderOverview().catch(() => {}), 60_000);
+  show(VIEWS[current] && (isAdmin || !["users", "activity"].includes(current)) ? current : "overview");
+  clearInterval(refresher);
+  refresher = setInterval(() => current === "overview" && renderOverview().catch(() => {}), 60_000);
 }
-if (token) api("/api/dashboard").then(start).catch(logout);
+if (token) start().catch(() => logout(false));

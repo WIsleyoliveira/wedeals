@@ -18,7 +18,8 @@ import { MARKETPLACES } from "../domain/types";
 import { parseHHMM } from "../groups/rules";
 import { importOffers, linkAffiliateUrl, parseCsv } from "../links/importer";
 import { parseHttpsUrl } from "../links/validation";
-import { bearer, MIN_TOKEN_LENGTH, RateLimiter, tokenMatches } from "../security/auth";
+import { MIN_TOKEN_LENGTH, RateLimiter } from "../security/auth";
+import { registerAuth } from "./users";
 
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "public");
 const STATIC: Record<string, string> = {
@@ -106,17 +107,12 @@ export function buildApp(ctx: BrainContext, ops: AppOps = {}): FastifyInstance {
     return reply.code(status).send({ error: status === 500 ? "erro interno" : (err as Error).message });
   });
 
-  // Autenticação de todas as rotas /api (exceto health)
+  // Limite geral por IP; autenticação, papéis e auditoria ficam em registerAuth (users.ts)
   app.addHook("onRequest", async (req, reply) => {
     if (!req.url.startsWith("/api/") || req.url === "/api/health") return;
     if (!apiLimiter.allow(req.ip)) return reply.code(429).send({ error: "muitas requisições" });
-    if (!tokenMatches(bearer(req.headers.authorization), ctx.cfg.adminToken)) {
-      // só falhas contam para o bloqueio por força bruta
-      if (!authFailLimiter.allow(req.ip)) return reply.code(429).send({ error: "muitas tentativas" });
-      repo.audit("auth.denied", { url: req.url.slice(0, 100) }, now());
-      return reply.code(401).send({ error: "não autorizado" });
-    }
   });
+  registerAuth(app, ctx, authFailLimiter);
 
   // ---------- Público ----------
   for (const [route, file] of Object.entries(STATIC)) {
