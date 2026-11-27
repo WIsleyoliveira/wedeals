@@ -1,5 +1,7 @@
 # WeDeals — central inteligente de grupos de promoções (WAPE)
 
+[![CI](https://github.com/WIsleyoliveira/wedeals/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WIsleyoliveira/wedeals/actions/workflows/ci.yml)
+
 Receita por comissões de afiliados do **Mercado Livre, Shopee e SHEIN**. Sem checkout próprio, sem
 chatbot, sem atendimento, sem disparo 1:1, sem captação de telefones. Grupos somente-admin.
 
