@@ -109,6 +109,8 @@ export interface User {
   role: Role;
   active: boolean;
   mustChangePassword: boolean;
+  /** Verificação em duas etapas (app autenticador) ativa. */
+  mfaEnabled: boolean;
   createdAt: string;
   lastLoginAt: string | null;
 }

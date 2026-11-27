@@ -130,3 +130,10 @@ td.wrap { white-space: normal; min-width: 220px; }
 .alert-item small { color: var(--muted); }
 .all-clear { border: 1px solid rgba(25, 195, 125, 0.4); background: var(--green-soft); color: var(--green); border-radius: 12px; padding: 12px 14px; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mfa-card { width: min(440px, 100%); }
+.qr { background: #fff; border-radius: 12px; padding: 10px; width: 200px; height: 200px; justify-self: center; display: block; }
+.secret { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.06em; word-break: break-all; text-align: center; user-select: all; }
+.codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--navy-950); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; list-style: none; }
+.stack { display: grid; gap: 10px; }
+label.check { display: flex; gap: 8px; align-items: center; color: var(--text, inherit); font-size: 14px; margin: 6px 0; }
+label.check input { width: auto; }

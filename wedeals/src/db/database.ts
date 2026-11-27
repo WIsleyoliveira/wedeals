@@ -171,4 +171,14 @@ function migrate(db: DB) {
   // autor de cada ação (usuário ou "token-admin"); NULL nas ações do sistema e nos registros antigos
   if (!cols("audit_log").includes("actor")) db.exec("ALTER TABLE audit_log ADD COLUMN actor TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log (at)");
+  // verificação em duas etapas (TOTP) por conta
+  const userCols = cols("users");
+  for (const [name, type] of [["totp_secret", "TEXT"], ["totp_pending_secret", "TEXT"], ["totp_enabled", "INTEGER NOT NULL DEFAULT 0"], ["totp_last_step", "INTEGER"]] as const)
+    if (!userCols.includes(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+  db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used_at TEXT,
+    PRIMARY KEY (user_id, code_hash)
+  )`);
 }

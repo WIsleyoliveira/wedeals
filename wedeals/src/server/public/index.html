@@ -26,6 +26,24 @@
       <button type="button" id="login-mode" class="link">Entrar com o token de administrador</button>
       <p id="login-error" class="error" role="alert"></p>
     </form>
+    <form id="mfa-login-form" class="login-card" hidden>
+      <div class="brand"><span class="brand-mark">W</span><div><strong>Verificação em duas etapas</strong><small>Abra o app autenticador no celular</small></div></div>
+      <label for="mfa-login-code">Código de 6 dígitos (ou um código de recuperação)</label>
+      <input id="mfa-login-code" autocomplete="one-time-code" inputmode="text" maxlength="20" required autocapitalize="none" spellcheck="false" />
+      <button type="submit" class="btn primary">Confirmar</button>
+      <button type="button" id="mfa-login-back" class="link">Voltar</button>
+      <p id="mfa-login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="mfa-screen" class="login" hidden>
+    <div class="login-card mfa-card">
+      <div class="brand"><span class="brand-mark">W</span><div><strong>Verificação em duas etapas</strong><small id="mfa-who"></small></div></div>
+      <p id="mfa-reason" class="hint"></p>
+      <div id="mfa-body"></div>
+      <p id="mfa-error" class="error" role="alert"></p>
+      <button type="button" id="mfa-close" class="link">Voltar</button>
+    </div>
   </section>
 
   <section id="pwchange" class="login" hidden>
@@ -64,6 +82,7 @@
         <span id="publish-flag" class="pill"></span>
         <div class="whoami"><strong id="who-name"></strong><small id="who-role"></small></div>
         <button id="change-password" class="link">Trocar senha</button>
+        <button id="open-mfa" class="link">Verificação em duas etapas</button>
         <button id="logout" class="link">Sair</button>
       </div>
     </aside>
@@ -196,6 +215,12 @@
           <p class="hint"><strong>Operador</strong>: publicação assistida, ofertas, links, pausar grupos e rodar o ciclo. <strong>Administrador</strong>: tudo isso, mais grupos, comissões, custos, configurações e contas.</p>
         </div>
         <div class="card"><h2>Contas</h2><div id="users-list"></div></div>
+        <div class="card">
+          <h2>Verificação em duas etapas</h2>
+          <p class="hint">Exige, além da senha, um código do app autenticador do celular (Google Authenticator, Microsoft Authenticator, 1Password…). Ative na sua conta antes de exigir dos outros.</p>
+          <label class="check"><input type="checkbox" id="policy-admins" /> Obrigatória para administradores</label>
+          <label class="check"><input type="checkbox" id="policy-all" /> Obrigatória para todas as contas</label>
+        </div>
       </section>
 
       <section data-panel="activity" hidden>
