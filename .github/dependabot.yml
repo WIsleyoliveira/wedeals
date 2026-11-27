@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Dependências npm do projeto (o package.json fica em wedeals/)
+  - package-ecosystem: npm
+    directory: /wedeals
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+    groups:
+      # minor e patch juntos num único PR; versões principais vêm separadas
+      producao:
+        dependency-type: production
+        update-types: [minor, patch]
+      desenvolvimento:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Ações usadas no workflow de CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Sao_Paulo
+    labels: [dependencies]
+    commit-message:
+      prefix: "ci"
