@@ -50,12 +50,13 @@ export async function research(ctx: BrainContext) {
   const s = brainSettings(ctx.repo);
   let found = 0;
   const errors: string[] = [];
+  const limited: string[] = []; // cota esgotada é comportamento esperado, não falha
   for (const m of MARKETPLACES) {
     const adapter = ctx.adapters[m];
     if (!adapter.status().searchEnabled) continue;
     for (const kw of s.keywords[m] ?? []) {
       if (!ctx.quotas.tryConsume(m, ctx.clock())) {
-        errors.push(`${m}: cota esgotada`);
+        limited.push(`${m}: cota esgotada`);
         break;
       }
       try {
@@ -68,8 +69,9 @@ export async function research(ctx: BrainContext) {
     }
   }
   ctx.repo.incrCounter("researched", ctx.clock(), found);
-  ctx.repo.recordAgentRun("pesquisa", errors.length ? "error" : "ok", `${found} ofertas; ${errors.join(" | ")}`, ctx.clock());
-  return { found, errors };
+  const notes = [...errors, ...limited].join(" | ");
+  ctx.repo.recordAgentRun("pesquisa", errors.length ? "error" : "ok", `${found} ofertas${notes ? `; ${notes}` : ""}`, ctx.clock());
+  return { found, errors, limited };
 }
 
 /** Etapas 2–8: cupons, validação, histórico, classificação, vendedor, conversão, link de afiliado. */

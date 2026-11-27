@@ -8,7 +8,7 @@ chatbot, sem atendimento, sem disparo 1:1, sem captação de telefones. Grupos s
 - Planejamento técnico: [docs/PLANEJAMENTO_TECNICO.md](wedeals/docs/PLANEJAMENTO_TECNICO.md)
 - Viabilidade WhatsApp: [docs/VIABILIDADE_WHATSAPP.md](wedeals/docs/VIABILIDADE_WHATSAPP.md)
 - Integrações de marketplaces: [docs/INTEGRACOES_MARKETPLACES.md](wedeals/docs/INTEGRACOES_MARKETPLACES.md)
-- Deploy com Docker (servidor, HTTPS, backup): [docs/DEPLOY.md](wedeals/docs/DEPLOY.md)
+- Deploy com Docker (servidor, HTTPS, backup externo, alertas): [docs/DEPLOY.md](wedeals/docs/DEPLOY.md)
 
 ## Rodar
 
@@ -37,7 +37,7 @@ Detalhes, backup e restauração em [docs/DEPLOY.md](wedeals/docs/DEPLOY.md).
 
 ```bash
 cd wedeals
-npm test                 # tudo (67 testes)
+npm test                 # tudo (85 testes)
 npm run test:unit
 npm run test:integration
 npm run test:security
