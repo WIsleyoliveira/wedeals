@@ -8,6 +8,7 @@ chatbot, sem atendimento, sem disparo 1:1, sem captação de telefones. Grupos s
 - Planejamento técnico: [docs/PLANEJAMENTO_TECNICO.md](wedeals/docs/PLANEJAMENTO_TECNICO.md)
 - Viabilidade WhatsApp: [docs/VIABILIDADE_WHATSAPP.md](wedeals/docs/VIABILIDADE_WHATSAPP.md)
 - Integrações de marketplaces: [docs/INTEGRACOES_MARKETPLACES.md](wedeals/docs/INTEGRACOES_MARKETPLACES.md)
+- Deploy com Docker (servidor, HTTPS, backup): [docs/DEPLOY.md](wedeals/docs/DEPLOY.md)
 
 ## Rodar
 
@@ -22,11 +23,21 @@ node --env-file=.env --import tsx src/server/main.ts  # API + dashboard em http:
 node --env-file=.env --import tsx src/scheduler/worker.ts  # Mega Brain contínuo (24h)
 ```
 
+## Produção
+
+```bash
+cd wedeals
+cp .env.production.example .env.production   # DOMAIN, PUBLIC_BASE_URL, ADMIN_TOKEN
+docker compose --env-file .env.production up -d --build
+```
+
+Detalhes, backup e restauração em [docs/DEPLOY.md](wedeals/docs/DEPLOY.md).
+
 ## Testes
 
 ```bash
 cd wedeals
-npm test                 # tudo (62 testes)
+npm test                 # tudo (67 testes)
 npm run test:unit
 npm run test:integration
 npm run test:security
