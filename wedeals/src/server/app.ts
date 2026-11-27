@@ -160,7 +160,7 @@ export function buildApp(ctx: BrainContext): FastifyInstance {
 
   app.post("/api/offers/import", async (req) => {
     const b = z
-      .object({ format: z.enum(["csv", "json"]), data: z.union([z.string().max(5_000_000), z.array(z.record(z.unknown())).max(5000)]) })
+      .object({ format: z.enum(["csv", "json"]), data: z.union([z.string().max(5_000_000), z.array(z.record(z.string(), z.unknown())).max(5000)]) })
       .parse(req.body);
     const rows = b.format === "csv" ? parseCsv(String(b.data)) : (b.data as Record<string, unknown>[]);
     const r = importOffers(repo, rows, now(), ctx.cfg.affiliateExtraDomains);
@@ -253,7 +253,7 @@ export function buildApp(ctx: BrainContext): FastifyInstance {
   // ---------- Comissões e custos ----------
   app.post("/api/commissions/import", async (req) => {
     const b = z
-      .object({ format: z.enum(["csv", "json"]), data: z.union([z.string().max(5_000_000), z.array(z.record(z.unknown())).max(20000)]) })
+      .object({ format: z.enum(["csv", "json"]), data: z.union([z.string().max(5_000_000), z.array(z.record(z.string(), z.unknown())).max(20000)]) })
       .parse(req.body);
     const rows = b.format === "csv" ? parseCsv(String(b.data)) : (b.data as Record<string, unknown>[]);
     const r = importCommissions(repo, rows);
