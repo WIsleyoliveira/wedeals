@@ -66,7 +66,12 @@ const GroupSchema = z.object({
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() });
 
-export function buildApp(ctx: BrainContext): FastifyInstance {
+export interface AppOps {
+  /** Alertas operacionais (opcional): estado atual e envio de teste pelo dashboard/API. */
+  alerts?: { channels: string[]; active: () => { key: string; since: string; message: string }[]; test: () => Promise<void> };
+}
+
+export function buildApp(ctx: BrainContext, ops: AppOps = {}): FastifyInstance {
   if (!ctx.cfg.adminToken || ctx.cfg.adminToken.length < MIN_TOKEN_LENGTH) {
     throw new Error(`ADMIN_TOKEN ausente ou curto (mínimo ${MIN_TOKEN_LENGTH} caracteres)`);
   }
@@ -139,6 +144,18 @@ export function buildApp(ctx: BrainContext): FastifyInstance {
   app.get("/api/dashboard", async () => dashboardMetrics(repo, now()));
   app.get("/api/insights", async () => ({ ...commercialInsights(repo), weights: currentWeights(repo) }));
   app.get("/api/agents", async () => repo.listAgentRuns());
+  app.get("/api/alerts", async () => ({ channels: ops.alerts?.channels ?? [], active: ops.alerts?.active() ?? [] }));
+  app.post("/api/alerts/test", async (_req, reply) => {
+    if (!ops.alerts?.channels.length)
+      return reply.code(409).send({ error: "nenhum canal de alerta configurado (ALERT_TELEGRAM_CHAT_ID ou ALERT_WEBHOOK_URL)" });
+    try {
+      await ops.alerts.test();
+      repo.audit("alerts.test", { channels: ops.alerts.channels }, now());
+      return { ok: true, channels: ops.alerts.channels };
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+  });
   app.get("/api/integrations", async () => ({
     publishEnabled: ctx.cfg.publishEnabled,
     marketplaces: MARKETPLACES.map((m) => ctx.adapters[m].status()),
