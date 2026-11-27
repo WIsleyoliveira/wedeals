@@ -469,12 +469,13 @@ export class Repo {
       .run(action, JSON.stringify(detail ?? null).slice(0, 2000), at.toISOString(), actor);
   }
 
-  listAudit(o: { limit?: number; actor?: string } = {}): { id: number; action: string; detail: unknown; at: string; actor: string | null }[] {
-    const rows = (
-      o.actor
-        ? this.db.prepare("SELECT * FROM audit_log WHERE actor = ? ORDER BY id DESC LIMIT ?").all(o.actor, o.limit ?? 200)
-        : this.db.prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(o.limit ?? 200)
-    ) as Row[];
+  listAudit(o: { limit?: number; actor?: string; actions?: string[] } = {}): { id: number; action: string; detail: unknown; at: string; actor: string | null }[] {
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (o.actor) (where.push("actor = ?"), args.push(o.actor));
+    if (o.actions?.length) (where.push(`action IN (${o.actions.map(() => "?").join(",")})`), args.push(...o.actions));
+    const sql = `SELECT * FROM audit_log ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY id DESC LIMIT ?`;
+    const rows = this.db.prepare(sql).all(...args, o.limit ?? 200) as Row[];
     return rows.map((r) => ({ id: r.id, action: r.action, detail: parse(r.detail, null), at: r.at, actor: r.actor ?? null }));
   }
 

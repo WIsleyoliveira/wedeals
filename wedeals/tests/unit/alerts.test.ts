@@ -124,7 +124,40 @@ describe("API de alertas", () => {
     expect(res.json()).toEqual({ ok: true, channels: ["telegram"] });
     expect(r.calls[0].body.text).toContain("Alerta de teste");
     const list = await on.inject({ url: "/api/alerts", headers: { authorization: `Bearer ${TOKEN}` } });
-    expect(list.json()).toEqual({ channels: ["telegram"], active: [] });
+    expect(list.json()).toMatchObject({ channels: ["telegram"], monitoring: true, active: [], lastCheckAt: null });
+    expect(list.json().history[0]).toMatchObject({ type: "teste", source: "token-admin" });
+  });
+
+  it("verificar agora: registra o problema, mostra no painel e o resolvido no histórico", async () => {
+    const { ctx, setNow } = makeCtx();
+    const alerting = createAlerting(ctx, {});
+    const app = buildApp(ctx, alerting.ops);
+    const hdr = { authorization: `Bearer ${TOKEN}` };
+    const all = ["distribuicao", "classificacao", "fila", "pesquisa", "aprendizado"];
+    for (const a of all) ctx.repo.recordAgentRun(a, "ok", "", at(0));
+    ctx.repo.recordAgentRun("pesquisa", "error", "shopee: HTTP 401", at(0));
+
+    const r1 = (await app.inject({ method: "POST", url: "/api/alerts/check", headers: hdr })).json();
+    expect(r1.active).toHaveLength(1);
+    expect(r1.active[0]).toMatchObject({ key: "agente:pesquisa:erro", message: expect.stringContaining("HTTP 401") });
+    expect(r1.history[0]).toMatchObject({ type: "novo", source: "monitor", delivered: false });
+    expect(r1.lastCheckAt).toBe(at(0).toISOString());
+
+    // verificar de novo sem mudança não duplica o histórico
+    const r2 = (await app.inject({ method: "POST", url: "/api/alerts/check", headers: hdr })).json();
+    expect(r2.history).toHaveLength(1);
+
+    for (const a of all) ctx.repo.recordAgentRun(a, "ok", "", at(3));
+    setNow(at(3));
+    const r3 = (await app.inject({ method: "POST", url: "/api/alerts/check", headers: hdr })).json();
+    expect(r3.active).toEqual([]);
+    expect(r3.history.map((h: any) => h.type)).toEqual(["resolvido", "novo"]);
+  });
+
+  it("sem monitor no processo, verificar agora responde 409", async () => {
+    const { ctx } = makeCtx();
+    const r = await buildApp(ctx).inject({ method: "POST", url: "/api/alerts/check", headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(r.statusCode).toBe(409);
   });
 });
 
@@ -153,9 +186,11 @@ describe("backup externo", () => {
     const tg = recorder();
     const n = buildNotifier({ telegramBotToken: "1:a", telegramChatId: "1", webhookUrl: "", repeatHours: 6, instance: "i" }, ["SK"], tg.fetcher);
     const alerts = new AlertManager(n, memoryStore(), cfg, () => {});
-    const out = await runBackup({ env, alerts, fetcher: up.fetcher, now: () => T0, log: () => {} });
+    const recorded: any[] = [];
+    const out = await runBackup({ env, alerts, fetcher: up.fetcher, now: () => T0, log: () => {}, record: (r) => recorded.push(r) });
     expect(out.ok).toBe(false);
     expect(readdirSync(env.BACKUP_DIR)).toHaveLength(1);
     expect(tg.calls[0].body.text).toMatch(/Envio do backup .* HTTP 403/);
+    expect(recorded[0].events).toEqual([expect.objectContaining({ type: "novo", key: "backup:externo" })]);
   });
 });

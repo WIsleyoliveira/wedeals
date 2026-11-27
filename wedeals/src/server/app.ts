@@ -69,7 +69,13 @@ const IdParam = z.object({ id: z.coerce.number().int().positive() });
 
 export interface AppOps {
   /** Alertas operacionais (opcional): estado atual e envio de teste pelo dashboard/API. */
-  alerts?: { channels: string[]; active: () => { key: string; since: string; message: string }[]; test: () => Promise<void> };
+  alerts?: {
+    channels: string[];
+    active: () => { key: string; since: string; lastSentAt: string | null; message: string }[];
+    test: () => Promise<void>;
+    /** Roda uma verificação agora (a mesma que o monitor faz a cada 5 min). */
+    check: () => Promise<void>;
+  };
 }
 
 export function buildApp(ctx: BrainContext, ops: AppOps = {}): FastifyInstance {
@@ -140,13 +146,35 @@ export function buildApp(ctx: BrainContext, ops: AppOps = {}): FastifyInstance {
   app.get("/api/dashboard", async () => dashboardMetrics(repo, now()));
   app.get("/api/insights", async () => ({ ...commercialInsights(repo), weights: currentWeights(repo) }));
   app.get("/api/agents", async () => repo.listAgentRuns());
-  app.get("/api/alerts", async () => ({ channels: ops.alerts?.channels ?? [], active: ops.alerts?.active() ?? [] }));
-  app.post("/api/alerts/test", async (_req, reply) => {
+  const alertsView = () => {
+    // histórico: cada verificação que mudou algo vira uma ou mais linhas (novo, continua, resolvido, falha de envio)
+    const history = repo.listAudit({ actions: ["alerts.update", "alerts.test"], limit: 100 }).flatMap((e) => {
+      const d = (e.detail ?? {}) as { source?: string; events?: { type: string; message: string }[]; delivered?: boolean; sendError?: string };
+      if (e.action === "alerts.test") return [{ at: e.at, type: "teste", message: "Alerta de teste enviado", source: e.actor ?? "sistema", delivered: true }];
+      const rows = (d.events ?? []).map((ev) => ({ at: e.at, type: ev.type, message: ev.message, source: d.source ?? "monitor", delivered: Boolean(d.delivered) }));
+      if (d.sendError) rows.push({ at: e.at, type: "falha_envio", message: d.sendError, source: d.source ?? "monitor", delivered: false });
+      return rows;
+    });
+    return {
+      channels: ops.alerts?.channels ?? [],
+      monitoring: Boolean(ops.alerts),
+      active: ops.alerts?.active() ?? [],
+      lastCheckAt: repo.getSetting<string | null>("alerts.lastCheckAt", null),
+      history: history.slice(0, 100),
+    };
+  };
+  app.get("/api/alerts", async () => alertsView());
+  app.post("/api/alerts/check", async (_req, reply) => {
+    if (!ops.alerts) return reply.code(409).send({ error: "monitor de alertas não está ativo neste processo" });
+    await ops.alerts.check();
+    return alertsView();
+  });
+  app.post("/api/alerts/test", async (req, reply) => {
     if (!ops.alerts?.channels.length)
       return reply.code(409).send({ error: "nenhum canal de alerta configurado (ALERT_TELEGRAM_CHAT_ID ou ALERT_WEBHOOK_URL)" });
     try {
       await ops.alerts.test();
-      repo.audit("alerts.test", { channels: ops.alerts.channels }, now());
+      repo.audit("alerts.test", { channels: ops.alerts.channels }, now(), req.actor?.name ?? null);
       return { ok: true, channels: ops.alerts.channels };
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });

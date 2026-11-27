@@ -1,5 +1,5 @@
 import type { BrainContext } from "../brain/pipeline";
-import type { AlertManager, Issue } from "./alerts";
+import type { AlertManager, AlertResult, Issue } from "./alerts";
 
 /**
  * Tempo máximo sem execução de cada agente do Mega Brain antes de alertar. Os intervalos do worker são
@@ -52,16 +52,30 @@ export function collectIssues(ctx: BrainContext, now: Date, startedAt: Date): Is
   return issues;
 }
 
-export function startMonitor(ctx: BrainContext, alerts: AlertManager, everyMs = 5 * 60_000) {
-  const startedAt = ctx.clock();
+export const LAST_CHECK_KEY = "alerts.lastCheckAt";
+
+/** Registra no histórico (auditoria) o que mudou numa verificação. */
+export function recordAlertResult(repo: { audit: (a: string, d: unknown, at: Date) => void }, r: AlertResult, source: string, at: Date) {
+  if (!r.events.length && !r.sendError) return;
+  repo.audit("alerts.update", { source, events: r.events, delivered: r.sent.length > 0, ...(r.sendError ? { sendError: r.sendError } : {}) }, at);
+}
+
+/** Uma verificação completa: coleta os problemas, avisa e registra. */
+export async function checkNow(ctx: BrainContext, alerts: AlertManager, startedAt: Date) {
+  const now = ctx.clock();
+  const r = await alerts.update(collectIssues(ctx, now, startedAt), now);
+  recordAlertResult(ctx.repo, r, "monitor", now);
+  ctx.repo.setSetting(LAST_CHECK_KEY, now.toISOString());
+  return r;
+}
+
+export function startMonitor(ctx: BrainContext, alerts: AlertManager, everyMs = 5 * 60_000, startedAt = ctx.clock()) {
   let running = false;
   const tick = async () => {
     if (running) return;
     running = true;
     try {
-      const now = ctx.clock();
-      const r = await alerts.update(collectIssues(ctx, now, startedAt), now);
-      if (r.sent.length || r.resolved.length || r.sendError) ctx.repo.audit("alerts.update", r, now);
+      await checkNow(ctx, alerts, startedAt);
     } catch (e) {
       console.error(`[monitor] ${(e as Error).message}`);
     } finally {

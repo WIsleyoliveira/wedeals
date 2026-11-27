@@ -13,7 +13,7 @@ console.log(`WeDeals em http://${cfg.host}:${cfg.port} — publicação real ${c
 console.log(`Alertas: ${alerting.notifier.channels.length ? alerting.notifier.channels.join(", ") : "nenhum canal configurado (só log)"}`);
 
 // O monitor roda no processo do app para perceber quando o worker para.
-const monitor = startMonitor(ctx, alerting.manager);
+const monitor = startMonitor(ctx, alerting.manager, undefined, alerting.startedAt);
 if (alerting.notifier.channels.length) {
   // aviso de reinício: reinícios repetidos indicam que o app está caindo
   alerting.notifier.send(`WeDeals · ${alerting.instance}\n\nℹ️ Servidor iniciado.`).catch((e) => console.error(`[alerta] ${(e as Error).message}`));
