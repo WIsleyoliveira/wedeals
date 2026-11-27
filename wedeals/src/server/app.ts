@@ -11,6 +11,8 @@ import {
   confirmAssistedPublication,
   distributeOffer,
   runCycle,
+  AI_STATUS_KEY,
+  type AiStatus,
   type BrainContext,
   type BrainSettings,
 } from "../brain/pipeline";
@@ -188,7 +190,12 @@ export function buildApp(ctx: BrainContext, ops: AppOps = {}): FastifyInstance {
       { id: "whatsapp_unofficial", official: false, automatic: true, enabled: false, note: "Não implementado — requer aprovação expressa da WAPE" },
     ],
     telegramConfigured: Boolean(ctx.cfg.telegramBotToken),
-    ai: ctx.ai.name,
+    ai: {
+      provider: ctx.ai.name,
+      model: ctx.ai.model ?? null,
+      status: repo.getSetting<AiStatus | null>(AI_STATUS_KEY, null),
+      today: Object.fromEntries(["ai_hooks", "ai_fallback", "ai_rejected", "ai_unavailable"].map((m) => [m.replace("ai_", ""), repo.counterOnDay(m, now())])),
+    },
     quotas: ctx.quotas.snapshot(now()),
   }));
 

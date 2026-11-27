@@ -43,6 +43,15 @@ export function collectIssues(ctx: BrainContext, now: Date, startedAt: Date): Is
     for (const x of stale) issues.push({ key: `agente:${x.agent}:atrasado`, message: `Agente atrasado: ${x.text}` });
   }
 
+  // IA local configurada, mas sem responder: as mensagens saem com modelos prontos (não para nada)
+  if (ctx.ai.name !== "none") {
+    const st = ctx.repo.getSetting<{ lastOkAt: string | null; lastErrorAt: string | null; lastError: string | null } | null>("ai.status", null);
+    const errAt = st?.lastErrorAt ? new Date(st.lastErrorAt).getTime() : 0;
+    const okAt = st?.lastOkAt ? new Date(st.lastOkAt).getTime() : 0;
+    if (errAt > okAt && now.getTime() - errAt < 2 * 3_600_000)
+      issues.push({ key: "ia:indisponivel", message: `IA local sem responder; as mensagens estão saindo com modelos prontos (${st!.lastError ?? "sem detalhe"})` });
+  }
+
   // publicações automáticas que falharam na última hora
   const failed = ctx.repo.db
     .prepare("SELECT COUNT(*) AS n FROM publications WHERE status='failed' AND scheduled_for >= ?")

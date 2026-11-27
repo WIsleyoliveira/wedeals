@@ -155,6 +155,7 @@ async function renderInsights() {
       sec("Categorias por conversão", perf, i.byCategory),
       sec("Marketplaces por receita de comissão", perf, i.byMarketplace),
       sec("Faixas de preço", perf, i.byPriceBand),
+      sec("Chamada: IA local x modelo pronto", [["Quem escreveu", (r) => (r.key === "ia" ? "IA local" : "Modelo pronto")], ["Publicações", (r) => int(r.publications)], ["Cliques/post", (r) => r.clicksPerPost], ["Conversão", (r) => (r.conversionRate == null ? "—" : `${r.conversionRate}%`)]], i.byHookSource),
       sec("Horários com mais cliques (Brasília)", [["Hora", (r) => `${String((r.hourUtc + 21) % 24).padStart(2, "0")}h`], ["Cliques", (r) => int(r.clicks)]], i.byHour),
       sec("Produtos com mais cliques", [["Produto", (r) => r.key, "wrap"], ["Cliques", (r) => int(r.clicks)], ["Publicações", (r) => r.publications]], i.topProducts),
       sec("Baixo desempenho recorrente", [["Produto", (r) => r.key, "wrap"], ["Publicações", (r) => r.publications]], i.lowPerformers),
@@ -181,6 +182,15 @@ async function renderIntegrations() {
     h("h2", {}, "Canais de distribuição"),
     table([["Canal", (r) => r.id], ["Oficial", (r) => r.official ? "sim" : "não"], ["Automático", (r) => r.automatic ? "sim" : "não"], ["Situação", (r) => r.note || (r.id === "telegram_bot" ? (i.telegramConfigured ? "token configurado" : "sem token") : "ativo"), "wrap"]], i.channels));
   mount("#agents", table([["Agente", (r) => r.agent], ["Status", (r) => h("span", { class: "pill " + (r.status === "ok" ? "ok" : r.status === "error" ? "bad" : "off") }, r.status)], ["Última execução", (r) => dt(r.last_run_at)], ["Resultado", (r) => r.last_result, "wrap"]], agents));
+  const ai = i.ai;
+  const aiDown = ai.status?.lastErrorAt && (!ai.status.lastOkAt || ai.status.lastErrorAt > ai.status.lastOkAt);
+  mount("#ai-status", ai.provider === "none"
+    ? h("p", { class: "hint" }, "Desligada: as chamadas das mensagens saem dos modelos prontos (variando para não repetir no grupo). Para ligar, veja docs/DEPLOY.md → IA local.")
+    : h("div", { class: "stack" },
+        h("p", {}, h("span", { class: "pill " + (aiDown ? "bad" : ai.status?.lastOkAt ? "ok" : "off") }, aiDown ? "sem responder" : ai.status?.lastOkAt ? "funcionando" : "aguardando o primeiro uso"),
+          ` Ollama · modelo ${ai.model}`),
+        aiDown ? h("p", { class: "hint" }, `Último erro (${dt(ai.status.lastErrorAt)}): ${ai.status.lastError}. Enquanto isso, as mensagens saem com modelos prontos.`) : null,
+        table([["Hoje", () => "chamadas"], ["Escritas pela IA", () => int(ai.today.hooks)], ["Modelo pronto", () => int(ai.today.fallback)], ["Recusadas na checagem", () => int(ai.today.rejected)], ["IA sem responder", () => int(ai.today.unavailable)]], [{}])));
   mount("#quotas", table([["Provedor", (r) => r.provider], ["Hora", (r) => `${r.hour.used}/${r.hour.limit}`], ["Dia", (r) => `${r.day.used}/${r.day.limit}`]], i.quotas));
 }
 

@@ -9,7 +9,7 @@ export function commercialInsights(repo: Repo) {
   const db = repo.db;
   const pubs = db
     .prepare(
-      `SELECT p.tracking_code, p.published_at, o.category, o.price, o.marketplace, o.title, o.id offer_id,
+      `SELECT p.tracking_code, p.published_at, p.hook_source, o.category, o.price, o.marketplace, o.title, o.id offer_id,
         COALESCE((SELECT SUM(count) FROM clicks c WHERE c.tracking_code = p.tracking_code),0) clicks,
         COALESCE((SELECT COUNT(*) FROM commissions m WHERE m.tracking_code = p.tracking_code AND m.status!='cancelled'),0) sales,
         COALESCE((SELECT SUM(commission_amount) FROM commissions m WHERE m.tracking_code = p.tracking_code AND m.status!='cancelled'),0) commission
@@ -38,6 +38,8 @@ export function commercialInsights(repo: Repo) {
 
   const byCategory = group((r) => r.category).sort((a, b) => (b.conversionRate ?? -1) - (a.conversionRate ?? -1));
   const byMarketplace = group((r) => r.marketplace).sort((a, b) => b.commission - a.commission);
+  // chamada escrita pela IA local x modelo pronto (só publicações com origem registrada)
+  const byHookSource = group((r) => r.hook_source ?? "sem registro").filter((a) => a.key !== "sem registro");
   const byPriceBand = group((r) => priceBand(r.price)).sort((a, b) => (b.conversionRate ?? -1) - (a.conversionRate ?? -1));
 
   const byHour = (
@@ -107,6 +109,7 @@ export function commercialInsights(repo: Repo) {
     byCategory,
     byMarketplace,
     byPriceBand,
+    byHookSource,
     byHour,
     topProducts,
     lowPerformers,

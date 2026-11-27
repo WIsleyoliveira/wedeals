@@ -175,6 +175,10 @@ function migrate(db: DB) {
   const userCols = cols("users");
   for (const [name, type] of [["totp_secret", "TEXT"], ["totp_pending_secret", "TEXT"], ["totp_enabled", "INTEGER NOT NULL DEFAULT 0"], ["totp_last_step", "INTEGER"]] as const)
     if (!userCols.includes(name)) db.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+  // chamada (primeira linha) de cada publicação e quem escreveu: "ia" ou "modelo"
+  const pubCols = cols("publications");
+  if (!pubCols.includes("hook")) db.exec("ALTER TABLE publications ADD COLUMN hook TEXT");
+  if (!pubCols.includes("hook_source")) db.exec("ALTER TABLE publications ADD COLUMN hook_source TEXT");
   db.exec(`CREATE TABLE IF NOT EXISTS recovery_codes (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code_hash TEXT NOT NULL,

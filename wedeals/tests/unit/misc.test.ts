@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { acceptHook, generateHook, renderMessage, sanitizeText } from "../../src/messages/generator";
+import { acceptHook, generateHooks, renderMessage, sanitizeText } from "../../src/messages/generator";
 import { isAuthorizedImage, validateMarketplaceLink } from "../../src/links/validation";
 import { parseCsv } from "../../src/links/importer";
 import { ShopeeAffiliateAdapter, shopeeSignature } from "../../src/marketplaces/shopee";
@@ -32,9 +32,9 @@ describe("gerador de mensagens", () => {
   it("sanitiza marcação e controle", () => {
     expect(sanitizeText("*neg*\u0000rito_ ~x~")).toBe("neg rito x");
   });
-  it("sem IA usa chamada fixa", async () => {
+  it("chamada da IA com fatos inventados é descartada", async () => {
     const ai = { name: "fake", complete: vi.fn().mockResolvedValue("Preço de 10 reais") };
-    expect(await generateHook(ai, offer())).toBeNull();
+    expect(await generateHooks(ai, offer())).toEqual([]);
   });
 });
 

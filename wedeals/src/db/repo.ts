@@ -89,6 +89,8 @@ function toPublication(r: Row): Publication {
     imageUrl: r.image_url,
     publishedAt: r.published_at,
     error: r.error,
+    hook: r.hook ?? null,
+    hookSource: r.hook_source ?? null,
   };
 }
 
@@ -322,11 +324,16 @@ export class Repo {
   createPublication(p: Omit<Publication, "id" | "publishedAt" | "error">, now: Date): Publication {
     const res = this.db
       .prepare(
-        `INSERT INTO publications (offer_id, group_id, scheduled_for, status, message, tracking_code, image_url, created_at)
-         VALUES (?,?,?,?,?,?,?,?)`,
+        `INSERT INTO publications (offer_id, group_id, scheduled_for, status, message, tracking_code, image_url, hook, hook_source, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
       )
-      .run(p.offerId, p.groupId, p.scheduledFor, p.status, p.message, p.trackingCode, p.imageUrl, now.toISOString());
+      .run(p.offerId, p.groupId, p.scheduledFor, p.status, p.message, p.trackingCode, p.imageUrl, p.hook ?? null, p.hookSource ?? null, now.toISOString());
     return this.getPublication(Number(res.lastInsertRowid))!;
+  }
+
+  /** Chamadas usadas recentemente no grupo, para não repetir. */
+  recentHooks(groupId: number, limit = 15): string[] {
+    return (this.db.prepare("SELECT hook FROM publications WHERE group_id=? AND hook IS NOT NULL ORDER BY id DESC LIMIT ?").all(groupId, limit) as Row[]).map((r) => r.hook);
   }
 
   getPublication(id: number): Publication | undefined {
@@ -605,6 +612,11 @@ export class Repo {
         "INSERT INTO pipeline_counters (day, metric, value) VALUES (?,?,?) ON CONFLICT(day, metric) DO UPDATE SET value = value + excluded.value",
       )
       .run(at.toISOString().slice(0, 10), metric, by);
+  }
+
+  counterOnDay(metric: string, at: Date): number {
+    const r = this.db.prepare("SELECT COALESCE(SUM(value),0) n FROM pipeline_counters WHERE metric=? AND day=?").get(metric, at.toISOString().slice(0, 10)) as Row;
+    return r.n;
   }
 
   counterTotal(metric: string): number {

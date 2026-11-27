@@ -93,7 +93,12 @@ export interface Publication {
   imageUrl: string | null;
   publishedAt: string | null;
   error: string | null;
+  /** Frase de chamada usada na mensagem e quem a escreveu (IA local ou modelo pronto). */
+  hook?: string | null;
+  hookSource?: HookSource | null;
 }
+
+export type HookSource = "ia" | "modelo";
 
 export type CommissionStatus = "pending" | "approved" | "paid" | "cancelled";
 
