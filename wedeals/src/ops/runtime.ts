@@ -2,6 +2,7 @@ import type { BrainContext } from "../brain/pipeline";
 import type { AppConfig } from "../config";
 import type { Fetcher } from "../marketplaces/adapter";
 import type { AppOps } from "../server/app";
+import { checkNow } from "./monitor";
 import { AlertManager, alertConfigFromEnv, buildNotifier, type AlertState, type AlertStore, type Notifier } from "./alerts";
 
 const STATE_KEY = "alerts.state";
@@ -18,12 +19,14 @@ export function createAlerting(ctx: BrainContext, env: NodeJS.ProcessEnv = proce
     save: (s) => ctx.repo.setSetting(STATE_KEY, s),
   };
   const manager = new AlertManager(notifier, store, acfg);
+  const startedAt = ctx.clock();
   const ops: AppOps = {
     alerts: {
       channels: notifier.channels,
-      active: () => Object.entries(store.load()).map(([key, v]) => ({ key, since: v.since, message: v.message })),
+      active: () => Object.entries(store.load()).map(([key, v]) => ({ key, since: v.since, lastSentAt: v.lastSentAt, message: v.message })),
       test: () => notifier.send(`WeDeals · ${acfg.instance}\n\n🔔 Alerta de teste: os avisos de falha chegam aqui.`),
+      check: async () => void (await checkNow(ctx, manager, startedAt)),
     },
   };
-  return { notifier, manager, ops, instance: acfg.instance };
+  return { notifier, manager, ops, instance: acfg.instance, startedAt };
 }

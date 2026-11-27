@@ -4,7 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import type { Fetcher } from "../marketplaces/adapter";
-import { AlertManager, alertConfigFromEnv, buildNotifier, memoryStore } from "../ops/alerts";
+import { AlertManager, alertConfigFromEnv, buildNotifier, memoryStore, type AlertResult } from "../ops/alerts";
+import { recordAlertResult } from "../ops/monitor";
+import { openDatabase } from "./database";
+import { Repo } from "./repo";
 import { putObject, s3ConfigFromEnv, type S3Config } from "../ops/s3";
 
 const PREFIX = "wedeals-";
@@ -51,6 +54,8 @@ export interface BackupRunDeps {
   fetcher?: Fetcher;
   now?: () => Date;
   log?: (line: string) => void;
+  /** Registra o resultado no histórico de alertas do dashboard (opcional). */
+  record?: (r: AlertResult, at: Date) => void;
 }
 
 /** Uma rodada: cópia local + envio externo (se configurado); falhas viram alerta, sucesso resolve. */
@@ -80,7 +85,13 @@ export async function runBackup(d: BackupRunDeps): Promise<{ file?: string; key?
       issues.push({ key: "backup:externo", message: `Envio do backup para o armazenamento externo falhou: ${(e as Error).message}` });
     }
   }
-  await d.alerts.update(issues, now());
+  const at = now();
+  const r = await d.alerts.update(issues, at);
+  try {
+    d.record?.(r, at);
+  } catch (e) {
+    log(`histórico de alertas indisponível: ${(e as Error).message}`);
+  }
   return { file, key, ok: issues.length === 0 };
 }
 
@@ -101,7 +112,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(`Backup: local em ${env.BACKUP_DIR ?? "./backups"}, ${external}`);
 
   const run = async () => {
-    const r = await runBackup({ env, alerts });
+    const dbPath = env.DATABASE_PATH ?? "./data/wedeals.db";
+    const record = (res: AlertResult, at: Date) => {
+      if (!res.events.length && !res.sendError) return;
+      const db = openDatabase(dbPath);
+      try {
+        recordAlertResult(new Repo(db), res, "backup", at);
+      } finally {
+        db.close();
+      }
+    };
+    const r = await runBackup({ env, alerts, record });
     if (!hours && !r.ok) process.exitCode = 1;
   };
   await run();

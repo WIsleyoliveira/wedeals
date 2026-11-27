@@ -56,6 +56,7 @@
         <button data-view="insights">Inteligência</button>
         <button data-view="finance">Comissões e custos</button>
         <button data-view="integrations">Integrações e agentes</button>
+        <button data-view="alerts">Alertas <span id="badge-alerts" class="badge bad" hidden></span></button>
         <button data-view="users" data-admin hidden>Usuários</button>
         <button data-view="activity" data-admin hidden>Atividade</button>
       </nav>
@@ -164,6 +165,21 @@
           <div class="card"><h2>Agentes de IA</h2><div id="agents"></div></div>
         </div>
         <div class="card"><h2>Cotas</h2><div id="quotas"></div></div>
+      </section>
+
+      <section data-panel="alerts" hidden>
+        <div class="card">
+          <div class="topbar">
+            <h2>Agora</h2>
+            <div class="actions">
+              <button id="alerts-check" class="btn small">Verificar agora</button>
+              <button id="alerts-test" class="btn small" data-admin hidden>Enviar alerta de teste</button>
+            </div>
+          </div>
+          <p id="alerts-meta" class="hint"></p>
+          <div id="alerts-active"></div>
+        </div>
+        <div class="card"><h2>Histórico</h2><div id="alerts-history"></div></div>
       </section>
 
       <section data-panel="users" hidden>

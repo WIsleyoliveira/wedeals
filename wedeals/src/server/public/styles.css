@@ -123,3 +123,10 @@ td.wrap { white-space: normal; min-width: 220px; }
 .inline input { flex: 1; min-width: 0; }
 .temp-password { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--navy-950); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; user-select: all; }
 #users-list .actions { flex-wrap: nowrap; }
+.badge.bad { background: var(--danger); color: #fff; }
+.alert-list { display: grid; gap: 10px; }
+.alert-item { border: 1px solid rgba(255, 107, 107, 0.4); background: rgba(255, 107, 107, 0.08); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; }
+.alert-item strong { font-weight: 600; }
+.alert-item small { color: var(--muted); }
+.all-clear { border: 1px solid rgba(25, 195, 125, 0.4); background: var(--green-soft); color: var(--green); border-radius: 12px; padding: 12px 14px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }

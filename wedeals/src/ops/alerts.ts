@@ -101,10 +101,18 @@ export interface Issue {
   message: string;
 }
 
+export interface AlertEvent {
+  type: "novo" | "continua" | "resolvido";
+  key: string;
+  message: string;
+}
+
 export interface AlertResult {
   sent: string[];
   resolved: string[];
   active: string[];
+  /** O que mudou nesta verificação (para o histórico do dashboard). */
+  events: AlertEvent[];
   sendError?: string;
 }
 
@@ -128,6 +136,7 @@ export class AlertManager {
     const prev = this.store.load();
     const next: AlertState = {};
     const toSend: string[] = [];
+    const events: AlertEvent[] = [];
     const sent: string[] = [];
     const resolved: string[] = [];
     const repeatMs = this.cfg.repeatHours * 3_600_000;
@@ -138,16 +147,18 @@ export class AlertManager {
       next[i.key] = { since: p?.since ?? now.toISOString(), lastSentAt: p?.lastSentAt ?? null, message: i.message };
       if (due) {
         toSend.push(`${p ? "⚠️ Continua" : "🚨"} ${i.message}${p ? ` (desde ${fmt(p.since)})` : ""}`);
+        events.push({ type: p ? "continua" : "novo", key: i.key, message: i.message });
         sent.push(i.key);
       }
     }
     for (const [key, p] of Object.entries(prev)) {
       if (next[key]) continue;
       resolved.push(key);
+      events.push({ type: "resolvido", key, message: p.message });
       if (p.lastSentAt) toSend.push(`✅ Resolvido: ${p.message}`);
     }
 
-    const result: AlertResult = { sent: [], resolved, active: Object.keys(next) };
+    const result: AlertResult = { sent: [], resolved, active: Object.keys(next), events };
     if (toSend.length) {
       const text = `WeDeals · ${this.cfg.instance}\n\n${toSend.join("\n")}`;
       this.log(`[alerta] ${toSend.join(" | ")}`);

@@ -136,6 +136,9 @@ está caindo e reiniciando. Tokens e senhas são removidos das mensagens antes d
 
 Os alertas vão para o administrador, não para os grupos de ofertas, e não dependem de `PUBLISH_ENABLED`.
 
+No dashboard, a aba **Alertas** mostra os problemas ativos (com contador no menu), o histórico de avisos e
+resolvidos, e o botão **Verificar agora**. Sem canal configurado, os alertas aparecem só ali.
+
 **Telegram:** crie um bot com o @BotFather (ou use o mesmo do canal de ofertas), mande uma mensagem
 para ele e descubra o ID do chat em `https://api.telegram.org/bot<TOKEN>/getUpdates` (campo `chat.id`).
 Preencha `ALERT_TELEGRAM_CHAT_ID` (e `ALERT_TELEGRAM_BOT_TOKEN`, se for outro bot).

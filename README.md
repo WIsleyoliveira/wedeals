@@ -37,7 +37,7 @@ Detalhes, backup e restauração em [docs/DEPLOY.md](wedeals/docs/DEPLOY.md).
 
 ```bash
 cd wedeals
-npm test                 # unidade, integração, segurança e E2E (98 testes)
+npm test                 # unidade, integração, segurança e E2E (100 testes)
 npm run test:unit
 npm run test:integration
 npm run test:security

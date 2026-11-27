@@ -234,7 +234,48 @@ async function renderActivity() {
   mount("#activity-list", table([["Quando", (e) => dt(e.at)], ["Quem", (e) => e.actor === "token-admin" ? "Token de administrador" : e.actor || "sistema"], ["O quê", what, "wrap"]], rows));
 }
 
-const VIEWS = { users: ["Usuários", renderUsers], activity: ["Atividade", renderActivity], overview: ["Visão geral", renderOverview], assisted: ["Publicação assistida", renderAssisted], groups: ["Grupos", renderGroups], offers: ["Ofertas", renderOffers], links: ["Aguardando link", renderLinks], insights: ["Inteligência comercial", renderInsights], finance: ["Comissões e custos", renderFinance], integrations: ["Integrações e agentes", renderIntegrations] };
+const ALERT_TYPE = { novo: ["Novo", "bad"], continua: ["Continua", "warn"], resolvido: ["Resolvido", "ok"], falha_envio: ["Falha no envio", "bad"], teste: ["Teste", "off"] };
+const SOURCE_LABEL = { monitor: "monitor", backup: "backup", "token-admin": "token de administrador" };
+
+function updateAlertBadge(n) {
+  const b = $("#badge-alerts");
+  b.textContent = n;
+  b.hidden = !n;
+}
+async function refreshAlertBadge() {
+  try { updateAlertBadge((await api("/api/alerts")).active.length); } catch {}
+}
+
+function renderAlertsData(a) {
+  updateAlertBadge(a.active.length);
+  const channels = a.channels.length ? `Avisos enviados por: ${a.channels.map((c) => (c === "telegram" ? "Telegram" : "webhook")).join(" e ")}.` : "Nenhum canal configurado: os alertas só aparecem aqui. Configure Telegram ou webhook no servidor (docs/DEPLOY.md).";
+  $("#alerts-meta").textContent = `${channels} Verificação automática a cada 5 minutos${a.lastCheckAt ? `; última em ${dt(a.lastCheckAt)}` : ""}.`;
+  $("#alerts-test").disabled = !a.channels.length;
+  $("#alerts-test").title = a.channels.length ? "" : "Configure um canal de alerta no servidor primeiro";
+  mount("#alerts-active", a.active.length
+    ? h("div", { class: "alert-list" }, a.active.map((x) => h("div", { class: "alert-item" },
+        h("strong", {}, x.message),
+        h("small", {}, `Desde ${dt(x.since)}${x.lastSentAt && a.channels.length ? ` · último aviso ${dt(x.lastSentAt)}` : ""}`))))
+    : h("p", { class: "all-clear" }, "Tudo certo: nenhum problema ativo."));
+  mount("#alerts-history", table([
+    ["Quando", (e) => dt(e.at)],
+    ["Tipo", (e) => h("span", { class: "pill " + (ALERT_TYPE[e.type]?.[1] || "off") }, ALERT_TYPE[e.type]?.[0] || e.type)],
+    ["O quê", (e) => e.message, "wrap"],
+    ["Origem", (e) => SOURCE_LABEL[e.source] || e.source],
+    ["Avisado", (e) => (e.type === "falha_envio" ? "—" : e.delivered ? "sim" : a.channels.length ? "não" : "só aqui")],
+  ], a.history));
+}
+async function renderAlerts() { renderAlertsData(await api("/api/alerts")); }
+$("#alerts-check").addEventListener("click", async () => {
+  try { renderAlertsData(await api("/api/alerts/check", { method: "POST", body: {} })); toast("Verificação concluída"); }
+  catch (e) { toast(e.message, true); }
+});
+$("#alerts-test").addEventListener("click", async () => {
+  try { await api("/api/alerts/test", { method: "POST", body: {} }); toast("Alerta de teste enviado"); await renderAlerts(); }
+  catch (e) { toast(e.message, true); }
+});
+
+const VIEWS = { alerts: ["Alertas", renderAlerts], users: ["Usuários", renderUsers], activity: ["Atividade", renderActivity], overview: ["Visão geral", renderOverview], assisted: ["Publicação assistida", renderAssisted], groups: ["Grupos", renderGroups], offers: ["Ofertas", renderOffers], links: ["Aguardando link", renderLinks], insights: ["Inteligência comercial", renderInsights], finance: ["Comissões e custos", renderFinance], integrations: ["Integrações e agentes", renderIntegrations] };
 let current = "overview";
 async function show(view) {
   current = view;
@@ -383,6 +424,10 @@ async function start() {
   flag.className = "pill " + (health.publishEnabled ? "warn" : "ok");
   show(VIEWS[current] && (isAdmin || !["users", "activity"].includes(current)) ? current : "overview");
   clearInterval(refresher);
-  refresher = setInterval(() => current === "overview" && renderOverview().catch(() => {}), 60_000);
+  refreshAlertBadge();
+  refresher = setInterval(() => {
+    refreshAlertBadge();
+    if (current === "overview") renderOverview().catch(() => {});
+  }, 60_000);
 }
 if (token) start().catch(() => logout(false));

@@ -3,6 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import type { Role } from "../../src/domain/types";
 import { seedDemo } from "../../src/db/seed";
 import { hashPassword } from "../../src/security/auth";
+import { createAlerting } from "../../src/ops/runtime";
 import { buildApp } from "../../src/server/app";
 import { TOKEN, makeCtx } from "../helpers";
 
@@ -13,7 +14,7 @@ import { TOKEN, makeCtx } from "../helpers";
 export async function startDashboard() {
   const h = makeCtx();
   seedDemo(h.ctx);
-  const app: FastifyInstance = buildApp(h.ctx);
+  const app: FastifyInstance = buildApp(h.ctx, createAlerting(h.ctx, {}).ops); // monitor sem canal: alertas só no painel
   await app.listen({ port: 0, host: "127.0.0.1" });
   const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   const browser: Browser = await chromium.launch();

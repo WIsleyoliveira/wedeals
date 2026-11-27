@@ -154,6 +154,34 @@ describe("dashboard no navegador", () => {
     await context.close();
   });
 
+  it("alertas: contador no menu, problema ativo, verificar agora e resolvido no histórico", async () => {
+    const agents = ["distribuicao", "classificacao", "fila", "pesquisa", "aprendizado"];
+    const now = d.ctx.clock();
+    for (const a of agents) d.ctx.repo.recordAgentRun(a, "ok", "", now);
+    d.ctx.repo.recordAgentRun("pesquisa", "error", "shopee: HTTP 401 credencial recusada", now);
+
+    const { page, context, errors } = await d.open();
+    await d.login(page, "operadora", "senha-da-operadora-1");
+    await page.locator("#nav").getByRole("button", { name: /Alertas/ }).click();
+    await pw(page.locator(".all-clear")).toBeVisible(); // nenhuma verificação rodou ainda
+    await pw(page.locator("#alerts-test")).toBeHidden(); // teste de alerta é só para admin
+    await pw(page.locator("#alerts-meta")).toContainText("Nenhum canal configurado");
+
+    await page.getByRole("button", { name: "Verificar agora" }).click();
+    await pw(page.locator("#alerts-active .alert-item")).toHaveCount(1);
+    await pw(page.locator("#alerts-active")).toContainText("Pesquisa com erro: shopee: HTTP 401");
+    await pw(page.locator("#badge-alerts")).toHaveText("1");
+    await pw(page.locator("#alerts-history tbody tr").first()).toContainText("Novo");
+
+    d.ctx.repo.recordAgentRun("pesquisa", "ok", "3 ofertas", now);
+    await page.getByRole("button", { name: "Verificar agora" }).click();
+    await pw(page.locator(".all-clear")).toBeVisible();
+    await pw(page.locator("#badge-alerts")).toBeHidden();
+    await pw(page.locator("#alerts-history tbody tr").first()).toContainText("Resolvido");
+    expect(errors).toEqual([]);
+    await context.close();
+  });
+
   it("sair encerra a sessão no servidor", async () => {
     const { page, context } = await d.open();
     await d.login(page, "operadora", "senha-da-operadora-1");
