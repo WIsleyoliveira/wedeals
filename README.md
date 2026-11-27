@@ -5,15 +5,16 @@
 Receita por comissões de afiliados do **Mercado Livre, Shopee e SHEIN**. Sem checkout próprio, sem
 chatbot, sem atendimento, sem disparo 1:1, sem captação de telefones. Grupos somente-admin.
 
-- Planejamento técnico: [docs/PLANEJAMENTO_TECNICO.md](docs/PLANEJAMENTO_TECNICO.md)
-- Viabilidade WhatsApp: [docs/VIABILIDADE_WHATSAPP.md](docs/VIABILIDADE_WHATSAPP.md)
-- Integrações de marketplaces: [docs/INTEGRACOES_MARKETPLACES.md](docs/INTEGRACOES_MARKETPLACES.md)
+- Planejamento técnico: [docs/PLANEJAMENTO_TECNICO.md](wedeals/docs/PLANEJAMENTO_TECNICO.md)
+- Viabilidade WhatsApp: [docs/VIABILIDADE_WHATSAPP.md](wedeals/docs/VIABILIDADE_WHATSAPP.md)
+- Integrações de marketplaces: [docs/INTEGRACOES_MARKETPLACES.md](wedeals/docs/INTEGRACOES_MARKETPLACES.md)
 
 ## Rodar
 
 Requer Node 22+ (usa `node:sqlite`, sem dependências nativas).
 
 ```bash
+cd wedeals
 npm install
 cp .env.example .env        # defina ADMIN_TOKEN (mín. 24 caracteres)
 node --env-file=.env --import tsx src/db/seed.ts      # opcional: dados DEMO marcados
@@ -24,6 +25,7 @@ node --env-file=.env --import tsx src/scheduler/worker.ts  # Mega Brain contínu
 ## Testes
 
 ```bash
+cd wedeals
 npm test                 # tudo (62 testes)
 npm run test:unit
 npm run test:integration
