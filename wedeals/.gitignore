@@ -5,3 +5,4 @@ data
 .env.demo
 .env.production
 backups
+.tmp

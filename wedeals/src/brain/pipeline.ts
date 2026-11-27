@@ -2,12 +2,12 @@ import { randomBytes } from "node:crypto";
 import type { TextProvider } from "../ai/provider";
 import type { AppConfig } from "../config";
 import type { Repo } from "../db/repo";
-import { MARKETPLACES, type Group, type Marketplace, type Offer } from "../domain/types";
+import { MARKETPLACES, type Group, type HookSource, type Marketplace, type Offer } from "../domain/types";
 import type { ChannelRouter } from "../distribution/channels";
 import { isCompatible, isWithinWindow, nextSlot } from "../groups/rules";
 import { isAuthorizedImage } from "../links/validation";
 import type { AdapterRegistry } from "../marketplaces/registry";
-import { generateHook, renderMessage } from "../messages/generator";
+import { fallbackHook, generateHooks, pickHook, renderMessage } from "../messages/generator";
 import type { QuotaManager } from "../scheduler/quota";
 import { currentWeights, learnWeights } from "./learning";
 import { priceBand, scoreOffer } from "./score";
@@ -121,11 +121,56 @@ export async function evaluate(ctx: BrainContext, limit = 200) {
 
 const newTrackingCode = () => randomBytes(6).toString("base64url");
 
+export const AI_STATUS_KEY = "ai.status";
+export interface AiStatus {
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+}
+
+/** Chamadas geradas pela IA para uma oferta, repartidas entre os grupos do mesmo ciclo. */
+export interface HookPool {
+  candidates: string[] | null; // null = ainda não pediu à IA
+}
+
+/**
+ * Escolhe a chamada da mensagem: uma da IA que não se pareça com as usadas recentemente no grupo; se a IA
+ * estiver desligada, fora do ar, sem cota ou só devolver frases recusadas, um modelo pronto não repetido.
+ */
+async function chooseHook(ctx: BrainContext, offer: Offer, g: Group, pool: HookPool): Promise<{ hook: string; source: HookSource }> {
+  const now = ctx.clock();
+  const recent = ctx.repo.recentHooks(g.id);
+  if (ctx.ai.name !== "none" && pool.candidates === null) {
+    pool.candidates = [];
+    if (ctx.quotas.tryConsume("ai", now)) {
+      const hooks = await generateHooks(ctx.ai, offer, recent);
+      const st = ctx.repo.getSetting<AiStatus>(AI_STATUS_KEY, { lastOkAt: null, lastErrorAt: null, lastError: null });
+      if (hooks === null) {
+        ctx.repo.incrCounter("ai_unavailable", now);
+        ctx.repo.setSetting(AI_STATUS_KEY, { ...st, lastErrorAt: now.toISOString(), lastError: ctx.ai.lastError ?? "sem resposta" });
+      } else {
+        ctx.repo.setSetting(AI_STATUS_KEY, { ...st, lastOkAt: now.toISOString() });
+        if (!hooks.length) ctx.repo.incrCounter("ai_rejected", now);
+        pool.candidates = hooks;
+      }
+    }
+  }
+  const picked = pickHook(pool.candidates ?? [], recent);
+  if (picked) {
+    pool.candidates = (pool.candidates ?? []).filter((h) => h !== picked); // o próximo grupo recebe outra
+    ctx.repo.incrCounter("ai_hooks", now);
+    return { hook: picked, source: "ia" };
+  }
+  if (ctx.ai.name !== "none") ctx.repo.incrCounter("ai_fallback", now);
+  return { hook: fallbackHook(offer, recent), source: "modelo" };
+}
+
 /** Agenda uma oferta em um grupo se todas as regras do grupo permitirem. */
 export async function scheduleOfferForGroup(
   ctx: BrainContext,
   offer: Offer,
   g: Group,
+  pool: HookPool = { candidates: null },
 ): Promise<{ ok: boolean; reason?: string; publicationId?: number; scheduledFor?: string }> {
   const now = ctx.clock();
   const compat = isCompatible(g, offer, ctx.repo.lastOfferPublicationInGroup(offer.id, g.id), now);
@@ -135,7 +180,7 @@ export async function scheduleOfferForGroup(
   if (!slot) return { ok: false, reason: "sem horário disponível (limite diário/intervalo)" };
   const code = newTrackingCode();
   const link = `${ctx.cfg.publicBaseUrl}/r/${code}`;
-  const hook = ctx.quotas.tryConsume("ai", now) ? await generateHook(ctx.ai, offer) : null;
+  const { hook, source } = await chooseHook(ctx, offer, g, pool);
   const pub = ctx.repo.createPublication(
     {
       offerId: offer.id,
@@ -145,6 +190,8 @@ export async function scheduleOfferForGroup(
       message: renderMessage({ offer, link, template: g.template, hook }),
       trackingCode: code,
       imageUrl: isAuthorizedImage(offer.imageUrl) ? offer.imageUrl! : null,
+      hook,
+      hookSource: source,
     },
     now,
   );
@@ -159,8 +206,9 @@ export async function planQueue(ctx: BrainContext, maxOffers = 50) {
   const offers = ctx.repo.listOffers({ status: "approved", limit: maxOffers });
   for (const offer of offers) {
     let any = false;
+    const pool: HookPool = { candidates: null }; // uma ida à IA por oferta, repartida entre os grupos
     for (const g of groups) {
-      const r = await scheduleOfferForGroup(ctx, offer, g);
+      const r = await scheduleOfferForGroup(ctx, offer, g, pool);
       if (r.ok) {
         scheduled++;
         any = true;
@@ -180,9 +228,10 @@ export async function distributeOffer(ctx: BrainContext, offerId: number, groupI
     return { ok: false as const, error: `oferta com status ${offer.status} não pode ser distribuída` };
   }
   const results = [];
+  const pool: HookPool = { candidates: null };
   for (const id of [...new Set(groupIds)].slice(0, 200)) {
     const g = ctx.repo.getGroup(id);
-    results.push({ groupId: id, ...(g ? await scheduleOfferForGroup(ctx, offer, g) : { ok: false, reason: "grupo não encontrado" }) });
+    results.push({ groupId: id, ...(g ? await scheduleOfferForGroup(ctx, offer, g, pool) : { ok: false, reason: "grupo não encontrado" }) });
   }
   if (results.some((r) => r.ok) && offer.status === "approved") ctx.repo.updateOfferEvaluation(offer.id, { status: "queued" }, ctx.clock());
   ctx.repo.audit("offer.distribute", { offerId, groupIds }, ctx.clock());

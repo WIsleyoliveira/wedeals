@@ -57,7 +57,34 @@ services:
     depends_on:
       app: { condition: service_healthy }
 
+  # ---- IA local (opcional): docker compose --profile ia up -d ----
+  # Precisa de um servidor com ~8 GB de RAM para o llama3.1:8b (ou ~4 GB com um modelo de 3B).
+  ollama:
+    image: ollama/ollama:0.12.11
+    profiles: ["ia"]
+    restart: unless-stopped
+    expose: ["11434"] # só dentro da rede do compose; não fica exposto na internet
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # baixa o modelo uma vez (e confere a cada subida); sai depois de terminar
+  ollama-pull:
+    image: ollama/ollama:0.12.11
+    profiles: ["ia"]
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-llama3.1:8b}"]
+    depends_on:
+      ollama: { condition: service_healthy }
+
 volumes:
+  ollama:
   data:
   backups:
   caddy_data:

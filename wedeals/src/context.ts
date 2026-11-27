@@ -6,7 +6,7 @@ import { Repo } from "./db/repo";
 import { AssistedWhatsAppChannel, ChannelRouter, TelegramChannel, type DistributionChannel } from "./distribution/channels";
 import type { Fetcher } from "./marketplaces/adapter";
 import { buildAdapters, type AdapterRegistry } from "./marketplaces/registry";
-import { QuotaManager } from "./scheduler/quota";
+import { DEFAULT_QUOTAS, QuotaManager } from "./scheduler/quota";
 
 export interface ContextOverrides {
   fetcher?: Fetcher;
@@ -27,7 +27,8 @@ export function buildContext(cfg: AppConfig, o: ContextOverrides = {}): BrainCon
       o.channels ?? [new AssistedWhatsAppChannel(), new TelegramChannel(cfg.telegramBotToken, cfg.publishEnabled, fetcher)],
     ),
     ai: o.ai ?? buildTextProvider(cfg, fetcher),
-    quotas: new QuotaManager(repo),
+    // cota da IA vem da configuração (AI_DAILY_BUDGET_CALLS); as demais, dos padrões
+    quotas: new QuotaManager(repo, { ...DEFAULT_QUOTAS, ai: { perDay: cfg.ai.dailyBudgetCalls, perHour: Math.min(60, cfg.ai.dailyBudgetCalls) } }),
     clock: o.clock ?? (() => new Date()),
   };
 }

@@ -11,7 +11,7 @@ export interface AppConfig {
   mlAccessToken: string;
   affiliateExtraDomains: string[];
   telegramBotToken: string;
-  ai: { provider: "none" | "ollama"; ollamaUrl: string; ollamaModel: string; dailyBudgetCalls: number };
+  ai: { provider: "none" | "ollama"; ollamaUrl: string; ollamaModel: string; dailyBudgetCalls: number; timeoutMs: number };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -40,6 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ollamaUrl: env.OLLAMA_URL ?? "http://127.0.0.1:11434",
       ollamaModel: env.OLLAMA_MODEL ?? "llama3.1:8b",
       dailyBudgetCalls: Number(env.AI_DAILY_BUDGET_CALLS ?? 500),
+      timeoutMs: Math.max(5, Number(env.AI_TIMEOUT_SECONDS ?? 45) || 45) * 1000,
     },
   };
 }

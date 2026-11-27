@@ -173,6 +173,36 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://SEU_DOMINIO/api/ale
 Se o servidor inteiro cair, ele não consegue avisar. Cadastre `https://SEU_DOMINIO/api/health` num
 monitor externo gratuito (UptimeRobot, Better Stack, Healthchecks.io) com verificação a cada 5 minutos.
 
+## IA local (opcional)
+
+A IA escreve só a frase de abertura de cada mensagem (ex.: "🎧 Você ouve seu som e nada mais"), variando
+entre grupos e sem repetir o que o grupo viu recentemente. Nome, preço, cupom e link continuam vindo dos
+dados verificados. Ela roda no próprio servidor com o Ollama: nada é enviado a terceiros e não há custo por uso.
+
+1. Servidor com ~8 GB de RAM para o `llama3.1:8b` (ou ~4 GB com um modelo menor, como `qwen2.5:3b`).
+2. No `.env.production`: `AI_PROVIDER=ollama` (e `OLLAMA_MODEL`, se quiser outro modelo).
+3. Suba com o perfil `ia`. Na primeira vez, o `ollama-pull` baixa o modelo (~5 GB para o 8B):
+
+```bash
+docker compose --env-file .env.production --profile ia up -d
+docker compose logs -f ollama-pull     # acompanha o download
+```
+
+Como a frase é conferida antes de ir para a mensagem:
+- é recusada se tiver números, links, preço, desconto, cupom, frete, "melhor", "qualidade", superlativos
+  ("o mais…"), urgência ("só hoje", "últimas unidades"), exclusividade, tom de classificado ou inglês;
+- emojis fora de uma lista aprovada são removidos;
+- se nenhuma passar, se a IA estiver fora do ar ou se a cota diária (`AI_DAILY_BUDGET_CALLS`) acabar, a
+  mensagem sai com um modelo pronto, também sem repetir no grupo. A publicação nunca para por causa da IA.
+
+A checagem barra fatos inventados sobre preço e qualidade, mas não garante que toda frase faça sentido.
+No WhatsApp cada mensagem passa pela pessoa que publica. No Telegram automático, acompanhe as primeiras
+publicações.
+
+No dashboard: **Integrações e agentes → IA local** mostra se está funcionando e quantas chamadas saíram da
+IA ou do modelo pronto; **Inteligência** compara os cliques das duas; e a aba **Alertas** avisa se a IA
+parar de responder.
+
 ## Segurança
 
 - O dashboard fica público na internet, protegido por contas com senha (e pelo `ADMIN_TOKEN` de
