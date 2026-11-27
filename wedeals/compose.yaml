@@ -1,0 +1,64 @@
+# WeDeals em produção: app (API + dashboard), worker (Mega Brain 24h), backup do banco e Caddy (HTTPS).
+#   cp .env.production.example .env.production   # preencha DOMAIN, ADMIN_TOKEN e PUBLIC_BASE_URL
+#   docker compose --env-file .env.production up -d --build
+
+x-wedeals: &wedeals
+  build: .
+  image: wedeals:latest
+  env_file: .env.production
+  restart: unless-stopped
+  volumes:
+    - data:/app/data
+  logging:
+    driver: local
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  app:
+    <<: *wedeals
+    environment:
+      HOST: 0.0.0.0
+      TRUST_PROXY_HOPS: "1" # só o Caddy fica à frente
+    expose: ["3100"]
+
+  worker:
+    <<: *wedeals
+    command: ["node", "--no-warnings", "--import", "tsx", "src/scheduler/worker.ts"]
+    healthcheck: { disable: true }
+    depends_on:
+      app: { condition: service_healthy }
+
+  backup:
+    <<: *wedeals
+    command: ["node", "--no-warnings", "--import", "tsx", "src/db/backup.ts"]
+    environment:
+      BACKUP_INTERVAL_HOURS: "6"
+      BACKUP_KEEP: "28" # 7 dias de cópias a cada 6h
+    volumes:
+      - data:/app/data
+      - backups:/app/backups
+    healthcheck: { disable: true }
+    depends_on:
+      app: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app: { condition: service_healthy }
+
+volumes:
+  data:
+  backups:
+  caddy_data:
+  caddy_config:

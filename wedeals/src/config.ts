@@ -1,5 +1,8 @@
 export interface AppConfig {
   port: number;
+  host: string;
+  /** Nº de proxies reversos confiáveis à frente do app (0 = nenhum). */
+  trustProxyHops: number;
   adminToken: string;
   databasePath: string;
   publishEnabled: boolean;
@@ -14,6 +17,8 @@ export interface AppConfig {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     port: Number(env.PORT ?? 3100),
+    host: env.HOST ?? "127.0.0.1",
+    trustProxyHops: Math.max(0, Math.floor(Number(env.TRUST_PROXY_HOPS ?? 0)) || 0),
     adminToken: env.ADMIN_TOKEN ?? "",
     databasePath: env.DATABASE_PATH ?? "./data/wedeals.db",
     // Publicação real só com liberação explícita.

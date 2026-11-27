@@ -1,0 +1,13 @@
+# HTTPS automático (Let's Encrypt) para o domínio em DOMAIN.
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	reverse_proxy app:3100
+	log {
+		output stdout
+		format console
+	}
+}

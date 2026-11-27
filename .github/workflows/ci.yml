@@ -49,3 +49,29 @@ jobs:
 
       - name: Auditoria de dependências
         run: npm audit --audit-level=high
+
+  docker:
+    name: Build da imagem Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build
+        run: docker build -t wedeals:ci wedeals
+
+      - name: Smoke test
+        run: |
+          docker run -d --name wedeals -p 3100:3100 -e ADMIN_TOKEN=ci-token-com-mais-de-24-caracteres wedeals:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3100/api/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs wedeals
+          exit 1
+
+      - name: Validar compose
+        working-directory: wedeals
+        run: |
+          cp .env.production.example .env.production
+          docker compose --env-file .env.production config --quiet

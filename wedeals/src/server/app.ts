@@ -70,7 +70,12 @@ export function buildApp(ctx: BrainContext): FastifyInstance {
   if (!ctx.cfg.adminToken || ctx.cfg.adminToken.length < MIN_TOKEN_LENGTH) {
     throw new Error(`ADMIN_TOKEN ausente ou curto (mínimo ${MIN_TOKEN_LENGTH} caracteres)`);
   }
-  const app = Fastify({ logger: false, bodyLimit: 5 * 1024 * 1024, trustProxy: false });
+  const app = Fastify({
+    logger: false,
+    bodyLimit: 5 * 1024 * 1024,
+    // confia só nos N saltos de proxy configurados (ex.: Caddy); sem proxy, X-Forwarded-For é ignorado
+    trustProxy: ctx.cfg.trustProxyHops > 0 ? (_addr: string, hop: number) => hop < ctx.cfg.trustProxyHops : false,
+  });
   const apiLimiter = new RateLimiter(300, 60_000);
   const authFailLimiter = new RateLimiter(10, 15 * 60_000);
   const redirectLimiter = new RateLimiter(120, 60_000);

@@ -41,5 +41,12 @@ export function startWorker(ctx: BrainContext, intervals = INTERVALS) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const ctx = buildContext(loadConfig());
   console.log("Worker do Mega Brain iniciado");
-  startWorker(ctx);
+  const stop = startWorker(ctx);
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    process.once(sig, () => {
+      stop();
+      ctx.repo.db.close();
+      process.exit(0);
+    });
+  }
 }
