@@ -96,3 +96,19 @@ export interface Publication {
 }
 
 export type CommissionStatus = "pending" | "approved" | "paid" | "cancelled";
+
+/** Papéis no dashboard. admin: tudo, inclusive usuários e configurações. operador: o dia a dia. */
+export const ROLES = ["admin", "operador"] as const;
+export type Role = (typeof ROLES)[number];
+
+/** Conta de pessoa no dashboard. Só o necessário: sem e-mail, telefone ou documento. */
+export interface User {
+  id: number;
+  username: string;
+  displayName: string;
+  role: Role;
+  active: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}

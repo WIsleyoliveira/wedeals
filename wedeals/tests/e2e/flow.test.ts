@@ -82,6 +82,20 @@ describe("E2E — central de afiliados", () => {
     expect(agents.map((a: any) => a.agent)).toEqual(expect.arrayContaining(["pesquisa", "classificacao", "fila", "distribuicao", "aprendizado"]));
   });
 
+  it("conta por pessoa: criar, primeiro acesso com troca de senha e uso do dashboard", async () => {
+    const created = await call("/api/users", { method: "POST", json: { username: "e2e.op", displayName: "E2E", role: "operador", password: "provisoria-e2e-1" } });
+    expect(created.status).toBe(201);
+    const login = await fetch(base + "/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "e2e.op", password: "provisoria-e2e-1" }) });
+    const { token } = await login.json();
+    const as = (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
+    expect((await as("/api/dashboard")).status).toBe(403);
+    expect((await as("/api/auth/password", { method: "POST", body: JSON.stringify({ currentPassword: "provisoria-e2e-1", newPassword: "definitiva-e2e-1" }) })).status).toBe(200);
+    expect((await as("/api/dashboard")).status).toBe(200);
+    expect((await as("/api/users")).status).toBe(403);
+    const log = await (await call("/api/activity?actor=e2e.op")).json();
+    expect(log.map((e: any) => e.action)).toEqual(expect.arrayContaining(["auth.login", "api"]));
+  });
+
   it("nenhuma publicação real acontece sem autorização", async () => {
     const pubs = await (await call("/api/publications")).json();
     const telegram = pubs.filter((p: any) => h.ctx.repo.getGroup(p.groupId)!.platform === "telegram");

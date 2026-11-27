@@ -127,6 +127,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail TEXT,
   at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  display_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('admin','operador')),
+  password_hash TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  last_login_at TEXT
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
 CREATE TABLE IF NOT EXISTS pipeline_counters (
   day TEXT NOT NULL,
   metric TEXT NOT NULL,
@@ -143,5 +161,14 @@ export function openDatabase(path: string): DB {
   // busy_timeout: servidor e worker gravam no mesmo arquivo (processos separados).
   db.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Migrações de bancos criados por versões anteriores (o SCHEMA só cria o que não existe). */
+function migrate(db: DB) {
+  const cols = (table: string) => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  // autor de cada ação (usuário ou "token-admin"); NULL nas ações do sistema e nos registros antigos
+  if (!cols("audit_log").includes("actor")) db.exec("ALTER TABLE audit_log ADD COLUMN actor TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log (at)");
 }

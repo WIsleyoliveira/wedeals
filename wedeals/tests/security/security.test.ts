@@ -123,6 +123,20 @@ describe("segurança", () => {
     expect(deps.filter((d) => /baileys|wppconnect|whatsapp|venom/i.test(d))).toEqual([]);
   });
 
+  it("contas: guarda só hash de senha e de sessão, sem dados pessoais além de nome e usuário", async () => {
+    const { app, ctx } = setup();
+    await app.inject({ method: "POST", url: "/api/users", headers: auth, payload: { username: "seg", displayName: "Seg", role: "operador", password: "senha-provisoria-1" } });
+    const { token } = (await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "seg", password: "senha-provisoria-1" } })).json();
+    const dump = JSON.stringify([ctx.repo.db.prepare("SELECT * FROM users").all(), ctx.repo.db.prepare("SELECT * FROM sessions").all()]);
+    expect(dump).not.toContain("senha-provisoria-1");
+    expect(dump).not.toContain(token);
+    const cols = (ctx.repo.db.prepare("PRAGMA table_info(users)").all() as any[]).map((c) => c.name);
+    expect(cols.sort()).toEqual(["active", "created_at", "display_name", "id", "last_login_at", "must_change_password", "password_hash", "role", "username"]);
+    // nenhuma resposta da API devolve o hash
+    const list = (await app.inject({ url: "/api/users", headers: auth })).body;
+    expect(list).not.toMatch(/scrypt|password_hash|passwordHash/);
+  });
+
   it("AliExpress fora do escopo: banco recusa o marketplace", () => {
     const { ctx } = setup();
     expect(() =>

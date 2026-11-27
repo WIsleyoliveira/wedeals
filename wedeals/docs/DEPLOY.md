@@ -37,7 +37,30 @@ docker compose --env-file .env.production up -d --build
 docker compose ps
 ```
 
-Abra `https://SEU_DOMINIO` e entre com o `ADMIN_TOKEN`. O `.env.production` fica fora do git.
+O `.env.production` fica fora do git.
+
+### Primeiro acesso: contas da equipe
+
+1. Abra `https://SEU_DOMINIO`, clique em **Entrar com o token de administrador** e use o `ADMIN_TOKEN`.
+2. Em **Usuários**, crie a sua conta como **Administrador** (use **Gerar** para a senha provisória).
+3. Saia, entre com a sua conta e troque a senha provisória (o sistema obriga no primeiro acesso).
+4. Crie as contas das outras pessoas. Cada uma recebe uma senha provisória e troca no primeiro acesso.
+
+| Papel | Pode |
+|---|---|
+| Operador | Publicação assistida, ofertas, vincular links, pausar/retomar grupos, rodar o ciclo do Mega Brain |
+| Administrador | Tudo do operador, mais criar e editar grupos, comissões, custos, configurações, alertas e contas |
+
+- Sessões duram 12 horas. Desativar uma conta, mudar o papel ou redefinir a senha encerra as sessões
+  da pessoa na hora.
+- A aba **Atividade** mostra quem fez cada alteração (login, publicação confirmada, grupo editado etc.).
+- Senha errada: no máximo 10 tentativas por IP e 5 por conta a cada 15 minutos.
+- O sistema não deixa ficar sem nenhum administrador ativo.
+- Guardamos só nome e usuário (sem e-mail ou telefone). Senhas ficam com hash scrypt.
+
+O `ADMIN_TOKEN` continua funcionando como **acesso de emergência** e para scripts (como o `curl` do
+alerta de teste). Guarde-o fora do dia a dia; as ações feitas com ele aparecem como "Token de
+administrador" na Atividade. Para trocá-lo, edite o `.env.production` e reinicie o `app`.
 
 ## Operação
 
@@ -134,8 +157,8 @@ monitor externo gratuito (UptimeRobot, Better Stack, Healthchecks.io) com verifi
 
 ## Segurança
 
-- O dashboard fica público na internet, protegido pelo `ADMIN_TOKEN`. Tentativas erradas são
-  bloqueadas por IP após 10 falhas em 15 minutos. O app confia só no Caddy (`TRUST_PROXY_HOPS=1`)
+- O dashboard fica público na internet, protegido por contas com senha (e pelo `ADMIN_TOKEN` de
+  emergência). Tentativas erradas são bloqueadas por IP e por conta. O app confia só no Caddy (`TRUST_PROXY_HOPS=1`)
   para saber o IP real do visitante.
 - Para restringir o painel a IPs conhecidos, adicione ao `Caddyfile`, antes do `reverse_proxy`
   (o `/r/*` e o `/api/health` continuam públicos):

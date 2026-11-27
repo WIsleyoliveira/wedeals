@@ -52,6 +52,22 @@ describe("deploy", () => {
     copy.close();
   });
 
+  it("banco da versão anterior ganha as tabelas de contas e o autor na auditoria", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wedeals-mig-"));
+    const path = join(dir, "antigo.db");
+    const old = new DatabaseSync(path);
+    old.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, detail TEXT, at TEXT NOT NULL)");
+    old.prepare("INSERT INTO audit_log (action, detail, at) VALUES ('x', 'null', '2026-01-01')").run();
+    old.close();
+    const db = openDatabase(path);
+    const cols = (db.prepare("PRAGMA table_info(audit_log)").all() as any[]).map((c) => c.name);
+    expect(cols).toContain("actor");
+    expect(db.prepare("SELECT action, actor FROM audit_log").get()).toEqual({ action: "x", actor: null });
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('users','sessions') ORDER BY name").all()).toEqual([{ name: "sessions" }, { name: "users" }]);
+    db.close();
+    openDatabase(path).close(); // rodar de novo não quebra
+  });
+
   it("limpeza de backups não apaga outros arquivos", () => {
     const dir = mkdtempSync(join(tmpdir(), "wedeals-prune-"));
     for (const f of ["wedeals-20260101T000000Z.db", "wedeals-20260102T000000Z.db", "notas.txt"]) writeFileSync(join(dir, f), "");
